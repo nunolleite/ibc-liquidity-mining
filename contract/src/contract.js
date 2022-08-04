@@ -1,63 +1,84 @@
 // @ts-check
 import '@agoric/zoe/exported.js';
 import { AmountMath } from '@agoric/ertp';
+import { lockupStrategies, rewardStrategyTypes } from './definitions';
+import { checkTiers, checkLockupStrategy, checkRewardStrategyType, checkRewardStrategyStructure } from './verifiers';
 import { Far } from '@endo/marshal';
+import { makeScalarMap } from '@agoric/store';
 
 /**
- * This is a very simple contract that creates a new issuer and mints payments
- * from it, in order to give an example of how that can be done.  This contract
- * sends new tokens to anyone who has an invitation.
- *
- * The expectation is that most contracts that want to do something similar
- * would use the ability to mint new payments internally rather than sharing
- * that ability widely as this one does.
- *
- * To pay others in tokens, the creator of the instance can make
- * invitations for them, which when used to make an offer, will payout
- * the specified amount of tokens.
+ * Add description
  *
  * @type {ContractStartFn}
  */
 const start = async (zcf) => {
-  // Create the internal token mint for a fungible digital asset. Note
-  // that 'Tokens' is both the keyword and the allegedName.
-  const zcfMint = await zcf.makeZCFMint('Tokens');
-  // AWAIT
 
-  // Now that ZCF has saved the issuer, brand, and local amountMath, they
-  // can be accessed synchronously.
-  const { issuer, brand } = zcfMint.getIssuerRecord();
+  const {
+    ammPublicFacet,
+    timerService,
+    initialSupportedIssuers,
+    lockupStrategy,
+    rewardStrategy,
+    gTokenIssuer
+  } = zcf.getTerms();
 
-  /** @type {OfferHandler} */
-  const mintPayment = (seat) => {
-    const amount = AmountMath.make(brand, 1000n);
-    // Synchronously mint and allocate amount to seat.
-    zcfMint.mintGains(harden({ Token: amount }), seat);
-    // Exit the seat so that the user gets a payout.
-    seat.exit();
-    // Since the user is getting the payout through Zoe, we can
-    // return anything here. Let's return some helpful instructions.
-    return 'Offer completed. You should receive a payment from Zoe';
+  assert(checkLockupStrategy(lockupStrategy), `The given lockup strategy (${lockupStrategy}) is not supported`);
+  assert(checkRewardStrategyStructure(rewardStrategy), `The given reward strategy object (${rewardStrategy}) is malformed. Has to have type and definition.`);
+  const {
+    type: rewardStrategyType,
+    definition: rewardStrategyDefinition
+  } = rewardStrategy;
+  assert(checkRewardStrategyType(rewardStrategyType), `The given reward strategy type (${rewardStrategyType}) is not supported`);
+
+  if (rewardStrategyType === rewardStrategyTypes.TIER) {
+    assert(checkTiers(rewardStrategyDefinition), `Tiers for the reward strategy are malformed. Each has to have tokenAmount and timeAmount`);
+  }
+
+  const supportedIssuers = makeScalarMap('issuer'); // TODO: Initialize supportedIssuers with what's in supportedPools ?
+  // TODO: What to do with gTokenIssuer?
+
+  const makeInvitation = (hook, hookName) => {
+    return zcf.makeInvitation(hook, hookName);
+  }
+
+  const addSupportedIssuer = tokenIssuer => {
+    assert(!supportedIssuers.has(tokenIssuer), `${tokenIssuer} is already supported`);
+    supportedIssuers.init(tokenIssuer, ''); // TODO: What will be the value in the map?
+  }
+
+  const addRewardLiquidity = () => {}; // TODO: What's the parameter that is passed here ? Is it a seat? Do we need an invitation ?
+
+  const lockupToken = async (userSeat, offerArgs) => {
+
+    const timedLockup = async () => {};
+    const beginUnlockLockup = async () => {};
+
+    if (lockupStrategy === lockupStrategies.TIMED_LOCKUP) return await timedLockup();
+    return await beginUnlockLockup();
   };
 
-  const creatorFacet = Far('creatorFacet', {
-    // The creator of the instance can send invitations to anyone
-    // they wish to.
-    makeInvitation: () => zcf.makeInvitation(mintPayment, 'mint a payment'),
-    getTokenIssuer: () => issuer,
+  const unlockToken = async (userSeat, offerArgs) => {
+
+  };
+
+  const withdraw = async (userSeat, offerArgs) => {
+
+  };
+
+  const creatorFacet = Far('creator facet', {
+    addSupportedIssuer,
+    addRewardLiquidity
   });
 
-  const publicFacet = Far('publicFacet', {
-    // Make the token issuer public. Note that only the mint can
-    // make new digital assets. The issuer is ok to make public.
-    getTokenIssuer: () => issuer,
+  const publicFacet = Far('public facet', {
+    isIssuerSupported: issuerType => supportedIssuers.has(issuerType),
+    makeLockupInvitation: () => makeInvitation(lockupToken, 'Token lockup'),
+    makeUnlockInvitation: () => makeInvitation(unlockToken, 'Token unlock'),
+    makeWithdrawInvitation: () => makeInvitation(withdraw, 'Withdraw tokens')
   });
 
-  // Return the creatorFacet to the creator, so they can make
-  // invitations for others to get payments of tokens. Publish the
-  // publicFacet.
   return harden({ creatorFacet, publicFacet });
-};
+}
 
 harden(start);
 export { start };
