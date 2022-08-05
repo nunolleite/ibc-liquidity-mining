@@ -19,9 +19,10 @@ const start = async (zcf) => {
     initialSupportedIssuers,
     lockupStrategy,
     rewardStrategy,
-    gTokenIssuer
+    gTokenBrand
   } = zcf.getTerms();
 
+  // TODO: Maybe use zcf.getIssuerForBrand(brand) to check if brand matches the issuer. Maybe another way ?
   assert(checkLockupStrategy(lockupStrategy), `The given lockup strategy (${lockupStrategy}) is not supported`);
   assert(checkRewardStrategyStructure(rewardStrategy), `The given reward strategy object (${rewardStrategy}) is malformed. Has to have type and definition.`);
   const {
@@ -34,8 +35,12 @@ const start = async (zcf) => {
     assert(checkTiers(rewardStrategyDefinition), `Tiers for the reward strategy are malformed. Each has to have tokenAmount and timeAmount`);
   }
 
-  const supportedIssuers = makeScalarMap('issuer'); // TODO: Initialize supportedIssuers with what's in supportedPools ?
-  // TODO: What to do with gTokenIssuer?
+  assert(!(rewardStrategyType === rewardStrategyTypes.TIER && lockupStrategy === lockupStrategies.UNLOCK), `Reward strategy of type tier is still not supported for the Unlock lockup strategy`);
+
+  const supportedIssuers = makeScalarMap('issuer');
+  for (const issuer of initialSupportedIssuers) { // TODO: try to find a better way of doing this maybe?
+    supportedIssuers.init(issuer, true);
+  }
 
   const makeInvitation = (hook, hookName) => {
     return zcf.makeInvitation(hook, hookName);
@@ -43,10 +48,10 @@ const start = async (zcf) => {
 
   const addSupportedIssuer = tokenIssuer => {
     assert(!supportedIssuers.has(tokenIssuer), `${tokenIssuer} is already supported`);
-    supportedIssuers.init(tokenIssuer, ''); // TODO: What will be the value in the map?
+    supportedIssuers.init(tokenIssuer, true); // TODO: For now we use bools, maybe later we wil want some metadata
   }
 
-  const addRewardLiquidity = () => {}; // TODO: What's the parameter that is passed here ? Is it a seat? Do we need an invitation ?
+  const addRewardLiquidity = (creatorSeat, offerArgs) => {};
 
   const lockupToken = async (userSeat, offerArgs) => {
 
@@ -67,7 +72,7 @@ const start = async (zcf) => {
 
   const creatorFacet = Far('creator facet', {
     addSupportedIssuer,
-    addRewardLiquidity
+    makeAddRewardLiquidityInvitation: () => makeInvitation(addRewardLiquidity, "Add reward Liquidity")
   });
 
   const publicFacet = Far('public facet', {
