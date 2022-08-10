@@ -33,7 +33,7 @@ const start = async (zcf) => {
   let lockupCounter = 1;
   const lockupsMap = makeScalarMap('lockups');
   const { brand: polBrand } = polMint.getIssuerRecord();
-  const periodNotifier = await E(timerService).makeNotifier(0n, SECONDS_PER_HOUR); 
+  const periodNotifier = await E(timerService).makeNotifier(0n, SECONDS_PER_HOUR);
 
   // TODO: Maybe we need to check if every issuer in initialSupportedIssuers is active in the AMM ?
   assert(checkLockupStrategy(lockupStrategy), `The given lockup strategy (${lockupStrategy}) is not supported`);
@@ -85,32 +85,32 @@ const start = async (zcf) => {
 
   const addRewardLiquidity = (creatorSeat) => {
     assertProposalShape(creatorSeat, {
-      give: {Governance: null}
+      give: { Governance: null }
     });
 
-    const { give: {Governance: gTokenAmount}} = creatorSeat.getProposal();
+    const { give: { Governance: gTokenAmount } } = creatorSeat.getProposal();
 
     totalGovernanceTokenSupply = AmountMath.add(totalGovernanceTokenSupply, gTokenAmount);
 
     zcfSeat.incrementBy(
-      creatorSeat.decrementBy(harden({Governance: gTokenAmount}))
+      creatorSeat.decrementBy(harden({ Governance: gTokenAmount }))
     );
 
     zcf.reallocate(zcfSeat, creatorSeat);
     creatorSeat.exit();
 
-    return "Governance token liquidity increased" 
+    return "Governance token liquidity increased"
   };
 
   const makeLockupInvitation = () => {
 
     const lockupHook = (userSeat, offerArgs) => {
       assertProposalShape(userSeat, {
-        give: {LpTokens: null},
-        want: {PolToken: null}
+        give: { LpTokens: null },
+        want: { PolToken: null }
       })
 
-      const { give : { LPTokens: lpTokensAmount }} = userSeat.getProposal();
+      const { give: { LPTokens: lpTokensAmount } } = userSeat.getProposal();
       const { brand } = lpTokensAmount;
       assert(supportedBrands.has(brand), `The brand ${brand} is not supported`);
 
@@ -148,7 +148,7 @@ const start = async (zcf) => {
         want: { UnbondingToken: null }
       })
 
-      const { give: { PolToken: polTokenAmount }} = userSeat.getProposal();
+      const { give: { PolToken: polTokenAmount } } = userSeat.getProposal();
       const lockupManager = lockupsMap.get(polTokenAmount.value[0].lockupId);
       const unlockResult = lockupManager.unlock(userSeat, offerArgs);
 
@@ -167,7 +167,7 @@ const start = async (zcf) => {
         want: { LpTokens: null },
       });
 
-      const { give: { RedeemToken: redeemTokenAmount }} = userSeat.getProposal();
+      const { give: { RedeemToken: redeemTokenAmount } } = userSeat.getProposal();
       const lockupManager = lockupsMap.get(redeemTokenAmount.value[0].lockupId);
       const redeemResult = lockupManager.redeem(userSeat);
 
@@ -186,7 +186,7 @@ const start = async (zcf) => {
         want: { Governance: null }
       });
 
-      const { give : { WithdrawToken: withdrawTokenAmount }} = userSeat.getProposal();
+      const { give: { WithdrawToken: withdrawTokenAmount } } = userSeat.getProposal();
       const lockupManager = lockupsMap.get(withdrawTokenAmount.value[0].lockupId);
       const withdrawResult = lockupManager.withdraw(userSeat);
 
@@ -201,8 +201,8 @@ const start = async (zcf) => {
 
   const creatorFacet = Far('creator facet', {
     addSupportedIssuer,
-    checkGovernanceTokenLiquidity: () => {return totalGovernanceTokenSupply.value},
-    makeAddRewardLiquidityInvitation: () => {return zcf.makeInvitation(addRewardLiquidity, "Add reward Liquidity")}
+    checkGovernanceTokenLiquidity: () => { return totalGovernanceTokenSupply.value },
+    makeAddRewardLiquidityInvitation: () => { return zcf.makeInvitation(addRewardLiquidity, "Add reward Liquidity") }
   });
 
   const publicFacet = Far('public facet', {

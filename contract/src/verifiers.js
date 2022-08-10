@@ -17,7 +17,7 @@ const checkTiers = tiers => {
         return "tokenAmount" && "timeAmount" in tier;
     }
 
-    return tiers.every(checkObjectCorrectness);    
+    return tiers.every(checkObjectCorrectness);
 }
 
 harden(checkTiers);

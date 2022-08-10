@@ -12,7 +12,7 @@ const secondsToDays = numberOfSeconds => {
 }
 
 const orderTiers = tiers => {
-    tiers.sort((a,b) => a.timeAmount < b.timeAmount ? -1 : 1);
+    tiers.sort((a, b) => a.timeAmount < b.timeAmount ? -1 : 1);
 }
 
 harden(daysToSeconds);
