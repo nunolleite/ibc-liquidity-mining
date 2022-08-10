@@ -1,16 +1,30 @@
+//@ts-check
 const SECONDS_PER_HOUR = 60n * 60n;
-const SECONDS_PER_DAY = SECONDS_PER_HOUR * 24;
+const SECONDS_PER_DAY = SECONDS_PER_HOUR * 24n;
 
-
+/**
+ * 
+ * @param {Number} numberOfDays 
+ * @returns {bigint}
+ */
 const daysToSeconds = numberOfDays => {
-    return numberOfDays * SECONDS_PER_DAY;
+    return BigInt(numberOfDays) * SECONDS_PER_DAY;
 }
 
+/**
+ * 
+ * @param {bigint} numberOfSeconds 
+ * @returns 
+ */
 const secondsToDays = numberOfSeconds => {
     // We are not flooring this on purpose, to allow custom time rewards using the CUSTOM or LINEAR strategies
     return numberOfSeconds / SECONDS_PER_DAY;
 }
 
+/**
+ * 
+ * @param {Array<Object>} tiers 
+ */
 const orderTiers = tiers => {
     tiers.sort((a, b) => a.timeAmount < b.timeAmount ? -1 : 1);
 }

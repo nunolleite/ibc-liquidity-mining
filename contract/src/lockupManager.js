@@ -1,10 +1,27 @@
+//@ts-check
+import '@agoric/zoe/exported.js';
 import { AmountMath } from "@agoric/ertp";
 import { makeSubscriptionKit } from "@agoric/notifier";
 import { E } from "@endo/eventual-send";
 import { Far } from "@endo/marshal";
-import { lockupStrategies } from "./definitions";
+import { lockupStrategies, rewardStrategyTypes } from "./definitions";
 import { daysToSeconds } from "./helpers";
 
+/**
+ * 
+ * @param {ZCF} zcf 
+ * @param {ZCFSeat} zcfSeat 
+ * @param {String} lockupId 
+ * @param {String} lockupStrategy 
+ * @param {String} rewardStrategyType 
+ * @param {Number | Function | Object} rewardStrategyValue 
+ * @param {ERef<TimerService>} timerService 
+ * @param {Brand} polBrand 
+ * @param {ZCFMint} polMint 
+ * @param {Brand} gTokenBrand 
+ * @param {Amount} amountLockedIn 
+ * @returns {Object}
+ */
 export const makeLockupManager = (
     zcf,
     zcfSeat,
@@ -22,12 +39,17 @@ export const makeLockupManager = (
     let rewardsCollected = 0.0;
     let lockupBondingPeriod = 0;
     let lockupUnbondingPeriod = 0;
-    let lockingTimestamp = 0;
-    let unbondingTimestamp = 0;
+    let lockingTimestamp = 0n;
+    let unbondingTimestamp = 0n;
     let hasExpired = false;
 
+    /**
+     * 
+     * @param {bigint} timeLockedIn 
+     * @returns {Number}
+     */
     const calculateCurrentRewards = (timeLockedIn) => {
-        const tokensLockedIn = amountLockedIn.value
+        const tokensLockedIn = amountLockedIn.value;
         if (rewardStrategyType === rewardStrategyTypes.LINEAR) {
             return (tokensLockedIn * timeLockedIn * (rewardStrategyValue ? rewardStrategyValue : 1)) - rewardsCollected;
         }
@@ -49,9 +71,14 @@ export const makeLockupManager = (
         return tier.tokenAmount * tokensLockedIn - rewardsCollected;
     }
 
+    /**
+     * 
+     * @param {bigint} currentTimestamp 
+     * @returns {Object}
+     */
     const checkLockupState = (currentTimestamp) => {
-        let timeLockedIn = 0;
-        let mostRecentConsideredTimestamp = 0;
+        let timeLockedIn = 0n;
+        let mostRecentConsideredTimestamp = 0n;
         let hasPassed = false;
 
         // proofOfToken will only have one of unbonding period or bonding period
@@ -64,7 +91,7 @@ export const makeLockupManager = (
 
         if (lockupBondingPeriod) {
             const bondingPeriodInSeconds = daysToSeconds(lockupBondingPeriod);
-            hasPassed = initialTimestamp + bondingPeriodInSeconds > currentTimestamp;
+            hasPassed = lockingTimestamp + bondingPeriodInSeconds > currentTimestamp;
             mostRecentConsideredTimestamp = hasPassed ? lockingTimestamp + bondingPeriodInSeconds : currentTimestamp;
         }
 
@@ -77,11 +104,17 @@ export const makeLockupManager = (
         hasExpired = hasPassed;
         return {
             expired: hasPassed,
-            rewardsToCollect: rewards,
+            rewardsToCollect: currentRewards,
             message: message
         }
     };
 
+    /**
+     * 
+     * @param {ZCFSeat} userSeat 
+     * @param {Object} offerArgs 
+     * @returns {Promise<Object>}
+     */
     const lockup = async (userSeat, offerArgs) => {
         const { brand, value } = amountLockedIn;
         const currentTimestamp = await E(timerService).getCurrentTimestamp();
@@ -118,6 +151,12 @@ export const makeLockupManager = (
         return harden({ message: "Succeeded. Tokens locked.", publicSubscribers: { subscription } });
     };
 
+    /**
+     * 
+     * @param {ZCFSeat} userSeat 
+     * @param {Object} offerArgs 
+     * @returns {Promise<Object>}
+     */
     const unlock = async (userSeat, offerArgs) => {
         lockupUnbondingPeriod = offerArgs.unbondingPeriod ? offerArgs.unbondingPeriod : 1;
 
@@ -154,6 +193,11 @@ export const makeLockupManager = (
         return harden({ message: "Unlock operation succeeded", publicSubscribers: { subscription } })
     };
 
+    /**
+     * 
+     * @param {ZCFSeat} userSeat 
+     * @returns {Promise<Object>}
+     */
     const redeem = async (userSeat) => {
         const { give: { RedeemToken: redeemTokenAmount }, want: { LpTokens: lpTokensAmount } } = userSeat.getProposal();
         const currentTimestamp = await E(timerService).getCurrentTimestamp();
@@ -177,7 +221,7 @@ export const makeLockupManager = (
             userSeat.decrementBy(harden({ RedeemToken: redeemTokenAmount }))
         )
 
-        zcf.reallocate();
+        zcf.reallocate(zcfSeat, userSeat);
 
         polMint.burnLosses({ RedeemToken: redeemTokenAmount }, zcfSeat)
 
@@ -188,6 +232,11 @@ export const makeLockupManager = (
         return "Tokens redeemed";
     }
 
+    /**
+     * 
+     * @param {ZCFSeat} userSeat 
+     * @returns {Promise<Object>}
+     */
     const withdraw = async (userSeat) => {
         const { want: { Governance: governanceTokenAmount } } = userSeat.getProposal();
         assert(governanceTokenAmount.brand === gTokenBrand, `The given brand ${governanceTokenAmount.brand} is not the brand of the reward governance token`);
@@ -210,6 +259,10 @@ export const makeLockupManager = (
         return `Successfully collected ${governanceTokenAmount.value} governance tokens`;
     };
 
+    /**
+     * 
+     * @param {bigint} updateTime 
+     */
     const notifyStateUpdate = updateTime => {
         const stateUpdate = checkLockupState(updateTime);
         lockupPublication.updateState(stateUpdate);
@@ -219,10 +272,18 @@ export const makeLockupManager = (
         }
     };
 
+    /**
+     * 
+     * @param {String | Object} reason 
+     */
     const notifyFail = reason => {
         lockupPublication.fail(reason);
     };
 
+    /**
+     * 
+     * @param {String | Object} done 
+     */
     const notifyFinish = done => {
         lockupPublication.finish(done);
     };

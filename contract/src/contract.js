@@ -67,6 +67,10 @@ const start = async (zcf) => {
 
   await initializeBrands();
 
+  /**
+   * 
+   * @param {Issuer} tokenIssuer 
+   */
   const addSupportedIssuer = async tokenIssuer => {
     const allegedBrand = zcf.getBrandForIssuer(tokenIssuer);
     assert(!supportedBrands.has(allegedBrand), `${tokenIssuer} is already supported`);
@@ -77,12 +81,22 @@ const start = async (zcf) => {
     supportedBrands.init(certainBrand, true); // TODO: For now we use bools, maybe later we wil want some metadata
   }
 
+  /**
+   * 
+   * @param {Issuer} issuer 
+   * @returns {Boolean}
+   */
   const isIssuerSupported = issuer => {
     const brand = zcf.getBrandForIssuer(issuer);
     if (supportedBrands.has(brand)) return true;
     return false;
   }
 
+  /**
+   * 
+   * @param {ZCFSeat} creatorSeat 
+   * @returns {String}
+   */
   const addRewardLiquidity = (creatorSeat) => {
     assertProposalShape(creatorSeat, {
       give: { Governance: null }
@@ -102,6 +116,10 @@ const start = async (zcf) => {
     return "Governance token liquidity increased"
   };
 
+  /**
+   * 
+   * @returns {Promise<Invitation>}
+   */
   const makeLockupInvitation = () => {
 
     const lockupHook = (userSeat, offerArgs) => {
@@ -117,7 +135,7 @@ const start = async (zcf) => {
       const lockupManager = makeLockupManager(
         zcf,
         zcfSeat,
-        lockupCounter,
+        String(lockupCounter),
         lockupStrategy,
         rewardStrategyType,
         rewardStrategyDefinition,
@@ -139,6 +157,10 @@ const start = async (zcf) => {
     return zcf.makeInvitation(lockupHook, "Lockup");
   }
 
+  /**
+   * 
+   * @returns {Promise<Invitation>}
+   */
   const makeUnlockInvitation = () => {
     assert(lockupStrategy === lockupStrategies.UNLOCK, `This contract does not support the unlocking strategy`);
 
@@ -159,6 +181,10 @@ const start = async (zcf) => {
     return zcf.makeInvitation(unlockHook, 'Unlock');
   }
 
+  /**
+   * 
+   * @returns {Promise<Invitation>}
+   */
   const makeRedeemInvitation = () => {
 
     const redeemHook = (userSeat) => {
@@ -178,6 +204,10 @@ const start = async (zcf) => {
     return zcf.makeInvitation(redeemHook, 'Redeem');
   }
 
+  /**
+   * 
+   * @returns {Promise<Invitation>}
+   */
   const makeWithdrawRewardsInvitation = () => {
 
     const withdrawRewardsHook = (userSeat) => {

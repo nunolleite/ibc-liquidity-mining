@@ -1,3 +1,4 @@
+//@ts-check
 const lockupStrategies = {
     TIMED_LOCKUP: "lock",
     UNLOCK: "unlock"
