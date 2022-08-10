@@ -1,5 +1,5 @@
 import { AmountMath } from "@agoric/ertp";
-import { makeSubscriptionKit, observeNotifier } from "@agoric/notifier";
+import { makeSubscriptionKit } from "@agoric/notifier";
 import { E } from "@endo/eventual-send";
 import { Far } from "@endo/marshal";
 import { lockupStrategies } from "./definitions";
@@ -12,7 +12,6 @@ export const makeLockupManager = (
     lockupStrategy,
     rewardStrategyType,
     rewardStrategyValue,
-    periodNotifier,
     timerService,
     polBrand,
     polMint,
@@ -21,21 +20,83 @@ export const makeLockupManager = (
 ) => {
     let lockupPublication = null;
     let rewardsCollected = 0.0;
+    let lockupBondingPeriod = 0;
+    let lockupUnbondingPeriod = 0;
+    let lockingTimestamp = 0;
+    let unbondingTimestamp = 0;
+    let hasExpired = false;
 
-    const checkLockupState = (polTokenInformation, currentTimestamp) => {};
+    const calculateCurrentRewards = (timeLockedIn) => {
+        const tokensLockedIn = amountLockedIn.value
+        if (rewardStrategyType === rewardStrategyTypes.LINEAR) {
+            return (tokensLockedIn * timeLockedIn * (rewardStrategyValue ? rewardStrategyValue : 1)) - rewardsCollected;
+        } 
+        if (rewardStrategyType === rewardStrategyTypes.CUSTOM) {
+            return rewardStrategyValue(tokensLockedIn, timeLockedIn) - rewardsCollected;
+        } 
+
+        let tier = null;
+        for (const valueTier of rewardStrategyValue) {
+            if (valueTier.timeAmount > timeLockedIn) {
+                // We know tiers are ordered asceding by timeAmount
+                break;
+            }
+
+            tier = valueTier;
+        }
+
+        if (!tier) return 0;
+        return tier.tokenAmount * tokensLockedIn - rewardsCollected;
+    }
+
+    const checkLockupState = (currentTimestamp) => {
+        let timeLockedIn = 0;
+        let mostRecentConsideredTimestamp = 0;
+        let hasPassed = false;
+
+        // proofOfToken will only have one of unbonding period or bonding period
+
+        if(unbondingTimestamp) {
+            const unbondingPeriodInSeconds = daysToSeconds(lockupUnbondingPeriod);
+            hasPassed = unbondingTimestamp + unbondingPeriodInSeconds > currentTimestamp;
+            mostRecentConsideredTimestamp = hasPassed ? lockingTimestamp + unbondingTimestamp + unbondingPeriodInSeconds : currentTimestamp
+        }
+
+        if(lockupBondingPeriod) {
+            const bondingPeriodInSeconds = daysToSeconds(lockupBondingPeriod);
+            hasPassed = initialTimestamp + bondingPeriodInSeconds > currentTimestamp;
+            mostRecentConsideredTimestamp = hasPassed ? lockingTimestamp + bondingPeriodInSeconds : currentTimestamp;
+        }
+
+        timeLockedIn = mostRecentConsideredTimestamp - lockingTimestamp;
+        const currentRewards = calculateCurrentRewards(timeLockedIn);
+
+        let message = `You currently have ${currentRewards} governance tokens to collect.`;
+        message += hasPassed ? 'Your token lockup has expired, no more rewards will be generated.' : ''
+
+        hasExpired = hasPassed;
+        return {
+            expired: hasPassed,
+            rewardsToCollect: rewards,
+            message: message
+        }
+    };
 
     const lockup = async (userSeat, offerArgs) => {
         const { brand, value } = amountLockedIn;
+        const currentTimestamp = await E(timerService).getCurrentTimestamp();
+        lockingTimestamp = currentTimestamp;
         const polTokenAmountValue = {
             lockupId,
             amountLockedIn: value,
             brandLockedIn: brand,
-            lockingTimestamp: await E(timeService).getCurrentTimestamp()
+            lockingTimestamp
         }
         if (lockupStrategy === lockupStrategies.TIMED_LOCKUP) {
             assert(typeof offerArgs === 'object', 'NO OFFER ARGUMENTS PRESENT');
             assert(offerArgs.hasOwnProperty('bondingPeriod'), 'NO OFFER ARGUMENTS PRESENT');
             polTokenAmountValue.bondingPeriod = offerArgs.bondingPeriod;
+            lockupBondingPeriod = polTokenAmountValue.bondingPeriod;
         }
 
         const newPolTokenAmount = AmountMath.make(polBrand, [polTokenAmountValue]);
@@ -54,36 +115,20 @@ export const makeLockupManager = (
         const { publication, subscription } = makeSubscriptionKit();
         lockupPublication = publication;
 
-        const observer = {
-            updateState: updateTime => {
-                const lockupState = checkLockupState(polTokenAmountValue, updateTime);
-                lockupPublication.updateState(lockupState);
-            },
-
-            fail: reason => {
-                lockupPublication.fail(reason);
-            },
-
-            finish: done => {
-                lockupPublication.finish(done);
-            }
-        }
-
-        observeNotifier(periodNotifier, observer);
-
         return harden({message: "Succeeded. Tokens locked.", publicSubscribers: {subscription}});
     };
 
     const unlock = async (userSeat, offerArgs) => {
-        const unbondingPeriod = offerArgs.unbondingPeriod ? offerArgs.unbondingPeriod : 1;
+        lockupUnbondingPeriod = offerArgs.unbondingPeriod ? offerArgs.unbondingPeriod : 1;
 
         const { give: { PolToken: polTokenAmount }} = userSeat.getProposal();
         const polToken = polTokenAmount.value[0];
-        const currentTimestamp = await E(timeService).getCurrentTimestamp();
+        const currentTimestamp = await E(timerService).getCurrentTimestamp();
+        unbondingTimestamp = currentTimestamp;
 
         const newUnbondingTokenAmount = AmountMath.make(polBrand, [{
             ...polToken,
-            unbondingPeriod,
+            unbondingPeriod: lockupUnbondingPeriod,
             unbondingTimestamp: currentTimestamp
         }]);
 
@@ -99,48 +144,28 @@ export const makeLockupManager = (
 
         zcf.reallocate(zcfSeat, userSeat);
 
-        // NOTE: Should we burn the polToken since it won't be used anymore ?
+        polMint.burnLosses({ PolToken: polTokenAmount }, zcfSeat)
 
         const { publication, subscription } = makeSubscriptionKit();
 
         lockupPublication.finish({message: "Unbonding has started", unbondingTimestamp: currentTimestamp});
         lockupPublication = publication;
 
-        // TODO: Remove the previous observer
-
-        const observer = {
-            updateState: updateTime => {
-                const unlockState = checkLockupState(newUnbondingTokenAmount.value[0], updateTime);
-                lockupPublication.updateState(unlockState);
-            },
-
-            fail: reason => {
-                lockupPublication.fail(reason);
-            },
-
-            finish: done => {
-                lockupPublication.finish(done);
-            }
-        }
-
-        observeNotifier(periodNotifier, observer);
-
         return harden({message: "Unlock operation succeeded", publicSubscribers: { subscription }})
     };
 
     const redeem = async (userSeat) => {
         const {give: { RedeemToken: redeemTokenAmount }, want: { LpTokens: lpTokensAmount }} = userSeat.getProposal();
-        const redeemToken = redeemTokenAmount.value[0];
         const currentTimestamp = await E(timerService).getCurrentTimestamp();
-        if (redeemToken.unbondingPeriod) {
-            const unbondingPeriodInSeconds = daysToSeconds(redeemToken.unbondingPeriod);
-            assert(redeemToken.unbondingTimestamp + unbondingPeriodInSeconds > currentTimestamp, `You are still in the unbonding period. Cannot redeem the LP tokens yet`);
+        if (lockupUnbondingPeriod) {
+            const unbondingPeriodInSeconds = daysToSeconds(lockupUnbondingPeriod);
+            assert(unbondingTimestamp + unbondingPeriodInSeconds > currentTimestamp, `You are still in the unbonding period. Cannot redeem the LP tokens yet`);
         } else {
-            const bondingPeriodInSeconds = daysToSeconds(redeemToken.bondingPeriod);
-            assert(redeemToken.lockingTimestamp + bondingPeriodInSeconds > currentTimestamp, `You are still in the bonding period. Cannot redeem tokens`);
+            const bondingPeriodInSeconds = daysToSeconds(lockupBondingPeriod);
+            assert(lockingTimestamp + bondingPeriodInSeconds > currentTimestamp, `You are still in the bonding period. Cannot redeem tokens`);
         }
 
-        assert(lpTokensAmount.value === amountLockedIn.value, `The amount you are trying to reddem is diferent than the one locked in`);
+        assert(lpTokensAmount.value === amountLockedIn.value, `The amount you are trying to redeem is diferent than the one locked in`);
         assert(lpTokensAmount.brand === amountLockedIn.brand, `The brand of the LP tokens you are trying to redeem is different than the one locked in`);
 
         // TODO: Check if there are still rewards to collect
@@ -154,55 +179,61 @@ export const makeLockupManager = (
 
         zcf.reallocate();
 
-        // TODO: Should we burn the redeem token?
-        // Kill all notifiers
+        polMint.burnLosses({ RedeemToken : redeemTokenAmount }, zcfSeat)
+
+        // TODO: Kill all notifiers
 
         userSeat.exit();
 
         return "Tokens redeemed";
     }
 
+    const withdraw = async (userSeat) => {
+        const { want : { Governance: governanceTokenAmount }} = userSeat.getProposal();
+        assert(governanceTokenAmount.brand === gTokenBrand, `The given brand ${governanceTokenAmount.brand} is not the brand of the reward governance token`);
+        const currentTimestamp = await E(timerService).getCurrentTimestamp();
+        const currentState = checkLockupState(currentTimestamp);
+        const { rewardsToCollect } = currentState;
+        // The want clause is not an "equal", but an "at least"
+        assert(rewardsToCollect >= governanceTokenAmount.value, `You do not have enough rewards to collect the given amount: ${governanceTokenAmount.value}`);
+
+        userSeat.incrementBy(
+            zcfSeat.decrementBy(harden({ Governance: governanceTokenAmount }))
+        )
+
+        zcf.reallocate(zcfSeat, userSeat);
+
+        rewardsCollected += governanceTokenAmount.value;
+
+        userSeat.exit();
+
+        return `Successfully collected ${governanceTokenAmount.value} governance tokens`;
+    };
+
+    const notifyStateUpdate = updateTime => {
+        const stateUpdate = checkLockupState(updateTime);
+        lockupPublication.updateState(stateUpdate);
+
+        if (hasExpired) {
+            lockupPublication.finish(harden({message: "Lockup has expired. Please collect your rewards and locked LP tokens"}));
+        }
+    };
+
+    const notifyFail = reason => {
+        lockupPublication.fail(reason);
+    };
+
+    const notifyFinish = done => {
+        lockupPublication.finish(done);
+    };
+
     return Far('lockup manager', {
         lockup,
         unlock,
-        redeem
+        redeem,
+        withdraw,
+        notifyStateUpdate,
+        notifyFail,
+        notifyFinish
     })
 };
-
-//   const withdraw = async (userSeat, offerArgs) => {
-//     // What most likely with this method is (two possible options):
-//     // 1 - User Wants governance tokens (the amount sent in the message) and Gives the Lockup NFT
-//     //  Here we need to check if it is an antipatter putting the NFT in the Give but not actually exchanging it
-//     // 2 - If we need to exchange the NFT we add a new metadata field which holds the amount of days whose rewards have already been withdrawn
-
-//   };
-
-//   const redeem = async (userSeat, offerArgs) => {
-//     assertProposalShape(userSeat, {
-//       give: { RedeemToken: null }, // RedeemToken is one of PolToken or UnbondingToken given before
-//       want: { LpTokens: null },
-//     })
-
-//     const {give: { RedeemToken: redeemTokenAmount }, want: { LpTokens: lpTokensAmount }} = userSeat.getProposal();
-//     const redeemToken = redeemTokenAmount.value[0];
-//     if (redeemToken.unbondingPeriod) {
-//       const unbondingPeriodInSeconds = daysToSeconds(redeemToken.unbondingPeriod);
-//       const currentTimestamp = await E(timerService).getCurrentTimestamp();
-
-//       assert(redeemToken.unbondingTimestamp + unbondingPeriodInSeconds <= currentTimestamp, `You are still in the unbonding period. Cannot redeem the LP tokens yet`);
-//     }
-//     // TODO: Check if any rewards are left to hand out
-//     assert(lpTokensAmount.value === redeemToken.amountLockedIn, `The amount wanted is not the same as the amount locked in`);
-//     assert(lpTokensAmount.brand === redeemToken.brandLockedIn, `The brand of the amount wanted is not the same as the brand locked in`);
-
-//     userSeat.incrementBy(
-//       zcfSeat.decrementBy(harden({LpTokens: lpTokensAmount}))
-//     )
-//     zcfSeat.incrementBy(
-//       userSeat.decrementBy(harden({ReddemToken: redeemTokenAmount}))
-//     )
-//     zcf.reallocate(zcfSeat, userSeat);
-//     // TODO: Should we burn the redeem token?
-//     userSeat.exit();
-//     return "Success. Your LP tokens are redeemed";
-//   }

@@ -9,8 +9,7 @@ import { E } from '@endo/eventual-send';
 import { makeScalarMap } from '@agoric/store';
 import { makeLockupManager } from './lockupManager';
 import { observeNotifier } from '@agoric/notifier';
-import { makeSubscriptionKit } from '@agoric/notifier';
-import { daysToSeconds, orderTiers, checkNewState, SECONDS_PER_HOUR } from './helpers';
+import { orderTiers, SECONDS_PER_HOUR } from './helpers';
 
 /**
  * Add description
@@ -122,7 +121,6 @@ const start = async (zcf) => {
         lockupStrategy,
         rewardStrategyType,
         rewardStrategyDefinition,
-        periodNotifier,
         timerService,
         polBrand,
         polMint,
@@ -163,7 +161,7 @@ const start = async (zcf) => {
 
   const makeRedeemInvitation = () => {
 
-    const redeemHook = (userSeat, offerArgs) => {
+    const redeemHook = (userSeat) => {
       assertProposalShape(userSeat, {
         give: { RedeemToken: null }, // RedeemToken is one of PolToken or UnbondingToken given before
         want: { LpTokens: null },
@@ -182,8 +180,18 @@ const start = async (zcf) => {
 
   const makeWithdrawRewardsInvitation = () => {
 
-    const withdrawRewardsHook = (userSeat, offerArgs) => {
+    const withdrawRewardsHook = (userSeat) => {
+      assertProposalShape(userSeat, {
+        give: { WithdrawToken: null },
+        want: { Governance: null }
+      });
 
+      const { give : { WithdrawToken: withdrawTokenAmount }} = userSeat.getProposal();
+      const lockupManager = lockupsMap.get(withdrawTokenAmount.value[0].lockupId);
+      const withdrawResult = lockupManager.withdraw(userSeat);
+
+      userSeat.exit();
+      return withdrawResult;
     }
 
     return zcf.makeInvitation(withdrawRewardsHook, "Withdraw rewards");
@@ -204,6 +212,34 @@ const start = async (zcf) => {
     makeRedeemInvitation,
     makeWithdrawRewardsInvitation
   });
+
+  const observer = {
+    updateState: updateTime => {
+      Array.from(lockupsMap.entries()).map(
+        async ([lockupId, lockupManager]) => {
+          await lockupManager.notifyStateUpdate(updateTime);
+        }
+      )
+    },
+
+    fail: reason => {
+      Array.from(lockupsMap.entries()).map(
+        async ([lockupId, lockupManager]) => {
+          await lockupManager.notifyFail(reason);
+        }
+      )
+    },
+
+    finish: done => {
+      Array.from(lockupsMap.entries()).map(
+        async ([lockupId, lockupManager]) => {
+          await lockupManager.notifyFinish(done);
+        }
+      )
+    }
+  }
+
+  observeNotifier(periodNotifier, observer);
 
   return harden({ creatorFacet, publicFacet });
 }
