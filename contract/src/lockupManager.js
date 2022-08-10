@@ -49,9 +49,9 @@ export const makeLockupManager = (
      * @returns {Number}
      */
     const calculateCurrentRewards = (timeLockedIn) => {
-        const tokensLockedIn = amountLockedIn.value;
+        const tokensLockedIn = BigInt(amountLockedIn.value.toString());
         if (rewardStrategyType === rewardStrategyTypes.LINEAR) {
-            return (tokensLockedIn * timeLockedIn * (rewardStrategyValue ? rewardStrategyValue : 1)) - rewardsCollected;
+            return Number(tokensLockedIn * timeLockedIn * (rewardStrategyValue ? rewardStrategyValue : 1)) - rewardsCollected;
         }
         if (rewardStrategyType === rewardStrategyTypes.CUSTOM) {
             return rewardStrategyValue(tokensLockedIn, timeLockedIn) - rewardsCollected;
@@ -68,7 +68,7 @@ export const makeLockupManager = (
         }
 
         if (!tier) return 0;
-        return tier.tokenAmount * tokensLockedIn - rewardsCollected;
+        return Number(tier.tokenAmount) * Number(tokensLockedIn) - rewardsCollected;
     }
 
     /**
@@ -252,7 +252,7 @@ export const makeLockupManager = (
 
         zcf.reallocate(zcfSeat, userSeat);
 
-        rewardsCollected += governanceTokenAmount.value;
+        rewardsCollected += Number(governanceTokenAmount.value);
 
         userSeat.exit();
 
