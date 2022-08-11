@@ -74,14 +74,11 @@ export const makeLockupManager = (
     /**
      * 
      * @param {bigint} currentTimestamp 
-     * @returns {Object}
+     * @returns {Object} {timeLockedIn, hasPassed}
      */
-    const checkLockupState = (currentTimestamp) => {
-        let timeLockedIn = 0n;
+    const getTimeLockInformation = currentTimestamp => {
         let mostRecentConsideredTimestamp = 0n;
         let hasPassed = false;
-
-        // proofOfToken will only have one of unbonding period or bonding period
 
         if (unbondingTimestamp) {
             const unbondingPeriodInSeconds = daysToSeconds(lockupUnbondingPeriod);
@@ -95,7 +92,17 @@ export const makeLockupManager = (
             mostRecentConsideredTimestamp = hasPassed ? lockingTimestamp + bondingPeriodInSeconds : currentTimestamp;
         }
 
-        timeLockedIn = mostRecentConsideredTimestamp - lockingTimestamp;
+        return {timeLockedIn: mostRecentConsideredTimestamp - lockingTimestamp, hasPassed};
+    }
+
+    /**
+     * 
+     * @param {bigint} currentTimestamp 
+     * @returns {Object}
+     */
+    const checkLockupState = (currentTimestamp) => {
+
+        const { timeLockedIn, hasPassed } = getTimeLockInformation(currentTimestamp);
         const currentRewards = calculateCurrentRewards(timeLockedIn);
 
         let message = `You currently have ${currentRewards} governance tokens to collect.`;
@@ -212,7 +219,10 @@ export const makeLockupManager = (
         assert(lpTokensAmount.value === amountLockedIn.value, `The amount you are trying to redeem is diferent than the one locked in`);
         assert(lpTokensAmount.brand === amountLockedIn.brand, `The brand of the LP tokens you are trying to redeem is different than the one locked in`);
 
-        // TODO: Check if there are still rewards to collect
+        const { timeLockedIn } = getTimeLockInformation(currentTimestamp);
+        const currentRewards = calculateCurrentRewards(timeLockedIn);
+        assert(currentRewards === 0.0, `Please collect all your rewards before redeeming your tokens, otherwise the rewards will be lost`);
+
         userSeat.incrementBy(
             zcfSeat.decrementBy(harden({ LpTokens: lpTokensAmount }))
         )
@@ -225,7 +235,7 @@ export const makeLockupManager = (
 
         polMint.burnLosses({ RedeemToken: redeemTokenAmount }, zcfSeat)
 
-        // TODO: Kill all notifiers
+        if (lockupPublication) lockupPublication.finish(harden({message : 'Tokens redeemed'}));
 
         userSeat.exit();
 
@@ -266,10 +276,6 @@ export const makeLockupManager = (
     const notifyStateUpdate = updateTime => {
         const stateUpdate = checkLockupState(updateTime);
         lockupPublication.updateState(stateUpdate);
-
-        if (hasExpired) {
-            lockupPublication.finish(harden({ message: "Lockup has expired. Please collect your rewards and locked LP tokens" }));
-        }
     };
 
     /**

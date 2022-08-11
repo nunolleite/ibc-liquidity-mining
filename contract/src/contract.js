@@ -29,7 +29,7 @@ const start = async (zcf) => {
 
   const { zcfSeat } = zcf.makeEmptySeatKit();
   let totalGovernanceTokenSupply = AmountMath.makeEmpty(gTokenBrand, 'nat');
-  const polMint = await zcf.makeZCFMint('polMint', AssetKind.SET);
+  const polMint = await zcf.makeZCFMint('PolMint', AssetKind.SET);
   let lockupCounter = 1;
   const lockupsMap = makeScalarMap('lockups');
   const { brand: polBrand } = polMint.getIssuerRecord();
@@ -72,13 +72,16 @@ const start = async (zcf) => {
    * @param {Issuer} tokenIssuer 
    */
   const addSupportedIssuer = async tokenIssuer => {
-    const allegedBrand = zcf.getBrandForIssuer(tokenIssuer);
-    assert(!supportedBrands.has(allegedBrand), `${tokenIssuer} is already supported`);
-
-    const allegedIssuerName = await tokenIssuer.getAllegedName();
-    await zcf.saveIssuer(tokenIssuer, allegedIssuerName);
-    const certainBrand = zcf.getBrandForIssuer(tokenIssuer);
-    supportedBrands.init(certainBrand, true); // TODO: For now we use bools, maybe later we wil want some metadata
+    try {
+      const allegedBrand = zcf.getBrandForIssuer(tokenIssuer);
+      assert(!supportedBrands.has(allegedBrand), `${tokenIssuer} is already supported`);
+    } catch (e) {
+      // Issuer is not yet supported
+      const allegedIssuerName = await tokenIssuer.getAllegedName();
+      await zcf.saveIssuer(tokenIssuer, allegedIssuerName);
+      const certainBrand = zcf.getBrandForIssuer(tokenIssuer);
+      supportedBrands.init(certainBrand, true); // TODO: For now we use bools, maybe later we wil want some metadata
+    }
   }
 
   /**
@@ -87,8 +90,12 @@ const start = async (zcf) => {
    * @returns {Boolean}
    */
   const isIssuerSupported = issuer => {
-    const brand = zcf.getBrandForIssuer(issuer);
-    if (supportedBrands.has(brand)) return true;
+    try {
+      const brand = zcf.getBrandForIssuer(issuer);
+      if (supportedBrands.has(brand)) return true;
+    } catch (error) {
+
+    }
     return false;
   }
 
