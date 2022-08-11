@@ -4,8 +4,7 @@ import { assertProposalShape } from '@agoric/zoe/src/contractSupport/index.js';
 import { AmountMath, AssetKind } from '@agoric/ertp';
 import { lockupStrategies, rewardStrategyTypes } from './definitions';
 import { checkTiers, checkLockupStrategy, checkRewardStrategyType, checkRewardStrategyStructure } from './verifiers';
-import { Far } from '@endo/marshal';
-import { E } from '@endo/eventual-send';
+import { E, Far } from '@endo/far';
 import { makeScalarMap } from '@agoric/store';
 import { makeLockupManager } from './lockupManager';
 import { observeNotifier } from '@agoric/notifier';
@@ -32,7 +31,7 @@ const start = async (zcf) => {
   const polMint = await zcf.makeZCFMint('PolMint', AssetKind.SET);
   let lockupCounter = 1;
   const lockupsMap = makeScalarMap('lockups');
-  const { brand: polBrand } = polMint.getIssuerRecord();
+  const { brand: polBrand, issuer: polIssuer } = polMint.getIssuerRecord();
   const periodNotifier = await E(timerService).makeNotifier(0n, SECONDS_PER_HOUR);
 
   // TODO: Maybe we need to check if every issuer in initialSupportedIssuers is active in the AMM ?
@@ -72,16 +71,19 @@ const start = async (zcf) => {
    * @param {Issuer} tokenIssuer 
    */
   const addSupportedIssuer = async tokenIssuer => {
+    let allegedBrand;
     try {
-      const allegedBrand = zcf.getBrandForIssuer(tokenIssuer);
-      assert(!supportedBrands.has(allegedBrand), `${tokenIssuer} is already supported`);
+      allegedBrand = zcf.getBrandForIssuer(tokenIssuer);
     } catch (e) {
       // Issuer is not yet supported
       const allegedIssuerName = await tokenIssuer.getAllegedName();
       await zcf.saveIssuer(tokenIssuer, allegedIssuerName);
       const certainBrand = zcf.getBrandForIssuer(tokenIssuer);
       supportedBrands.init(certainBrand, true); // TODO: For now we use bools, maybe later we wil want some metadata
+      return;
     }
+
+    assert(!supportedBrands.has(allegedBrand), `${tokenIssuer.getAllegedName()} issuer is already supported`);
   }
 
   /**
@@ -120,7 +122,7 @@ const start = async (zcf) => {
     zcf.reallocate(zcfSeat, creatorSeat);
     creatorSeat.exit();
 
-    return "Governance token liquidity increased"
+    return `Governance tokens liquidity increased by ${gTokenAmount.value}`
   };
 
   /**
@@ -129,13 +131,13 @@ const start = async (zcf) => {
    */
   const makeLockupInvitation = () => {
 
-    const lockupHook = (userSeat, offerArgs) => {
+    const lockupHook = async (userSeat, offerArgs) => {
       assertProposalShape(userSeat, {
         give: { LpTokens: null },
         want: { PolToken: null }
       })
 
-      const { give: { LPTokens: lpTokensAmount } } = userSeat.getProposal();
+      const { give: { LpTokens: lpTokensAmount } } = userSeat.getProposal();
       const { brand } = lpTokensAmount;
       assert(supportedBrands.has(brand), `The brand ${brand} is not supported`);
 
@@ -152,8 +154,8 @@ const start = async (zcf) => {
         gTokenBrand,
         lpTokensAmount
       )
-      const lockupResult = lockupManager.lockup(userSeat, offerArgs);
-      lockupsMap.init(lockupCounter, lockupManager);
+      const lockupResult = await lockupManager.lockup(userSeat, offerArgs);
+      lockupsMap.init(String(lockupCounter), lockupManager);
       lockupCounter += 1;
 
       userSeat.exit();
@@ -171,7 +173,7 @@ const start = async (zcf) => {
   const makeUnlockInvitation = () => {
     assert(lockupStrategy === lockupStrategies.UNLOCK, `This contract does not support the unlocking strategy`);
 
-    const unlockHook = (userSeat, offerArgs) => {
+    const unlockHook = async (userSeat, offerArgs) => {
       assertProposalShape(userSeat, {
         give: { PolToken: null },
         want: { UnbondingToken: null }
@@ -179,7 +181,7 @@ const start = async (zcf) => {
 
       const { give: { PolToken: polTokenAmount } } = userSeat.getProposal();
       const lockupManager = lockupsMap.get(polTokenAmount.value[0].lockupId);
-      const unlockResult = lockupManager.unlock(userSeat, offerArgs);
+      const unlockResult = await lockupManager.unlock(userSeat, offerArgs);
 
       userSeat.exit();
       return unlockResult;
@@ -243,11 +245,12 @@ const start = async (zcf) => {
   });
 
   const publicFacet = Far('public facet', {
+    getPolTokenIssuer: () => { return polIssuer},
     isIssuerSupported,
     makeLockupInvitation,
     makeUnlockInvitation,
     makeRedeemInvitation,
-    makeWithdrawRewardsInvitation
+    makeWithdrawRewardsInvitation,
   });
 
   const observer = {

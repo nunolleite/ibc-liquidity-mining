@@ -2,6 +2,8 @@
 const SECONDS_PER_HOUR = 60n * 60n;
 const SECONDS_PER_DAY = SECONDS_PER_HOUR * 24n;
 
+// TODO: daysToSeconds and secondsToDays might be misleading since the chain timer will give us millis
+// TODO: Change this to daysToTimerUnits and timerUnitsToDays so that it's automatic depending on the timer being used
 /**
  * 
  * @param {Number} numberOfDays 

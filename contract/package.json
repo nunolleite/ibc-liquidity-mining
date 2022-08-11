@@ -32,6 +32,7 @@
     "@endo/marshal": "^0.6.3",
     "@agoric/notifier": "beta",
     "@agoric/store": "beta",
+    "@endo/far": "0.2.3",
     "@agoric/zoe": "beta"
   },
   "ava": {

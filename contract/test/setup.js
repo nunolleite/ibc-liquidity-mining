@@ -11,6 +11,7 @@ const setupContract = async () => {
     const  feePurse  = await E(zoeService).makeFeePurse();
     const zoe = E(zoeService).bindDefaultFeePurse(feePurse);
 
+    // @ts-ignore
     const contractPath = new URL('../src/contract.js', import.meta.url).pathname;
     const bundle = await bundleSource(contractPath);
     const installation = await E(zoe).install(bundle);
@@ -24,10 +25,10 @@ const setupContract = async () => {
     }
 };
 
-const initializeContract = async (zoe, installation, terms, amountKeywordRecord = undefined) => {
+const initializeContract = async (zoe, installation, terms, issuerKeywordRecord) => {
     const { creatorFacet, publicFacet } = await E(zoe).startInstance(
         installation,
-        undefined,
+        issuerKeywordRecord,
         terms
       );
     

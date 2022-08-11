@@ -6,27 +6,29 @@ import { E } from '@endo/eventual-send';
 import { lockupStrategies, rewardStrategyTypes } from '../src/definitions.js';
 
 import {setupContract, initializeContract } from "./setup.js";
-import {getInitialSupportedIssuers, getGovernanceTokenBrand, getIssuer} from './helpers.js';
+import {getInitialSupportedIssuers, getGovernanceTokenKit, getIssuer} from './helpers.js';
+import { AmountMath, AssetKind } from '@agoric/ertp';
 
 test('check correct initialization', async (t) => {
   const { zoe, installation, timer } = await setupContract();
   const issuers = getInitialSupportedIssuers();
-  const gTokenBrand = getGovernanceTokenBrand();
+  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
+  const governanceTokenKit = getGovernanceTokenKit();
 
   const terms = harden({
     ammPublicFacet: undefined,
     timerService: timer,
-    initialSupportedIssuers: issuers,
+    initialSupportedIssuers: initialIssuers,
     lockupStrategy: lockupStrategies.TIMED_LOCKUP,
     rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
-    gTokenBrand
+    gTokenBrand: governanceTokenKit.brand
   })
 
-  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms);
+  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
 
-  const notSupportedIssuer = getIssuer('Fake');
+  const { issuer: notSupportedIssuer} = getIssuer('Fake');
 
-  const firstResponse = await E(publicFacet).isIssuerSupported(issuers[0]);
+  const firstResponse = await E(publicFacet).isIssuerSupported(issuers.moola.issuer);
   const secondResponse = await E(publicFacet).isIssuerSupported(notSupportedIssuer);
   
   t.is(firstResponse, true);
@@ -36,20 +38,21 @@ test('check correct initialization', async (t) => {
 test('able to add another supported issuer', async(t) => {
   const { zoe, installation, timer } = await setupContract();
   const issuers = getInitialSupportedIssuers();
-  const gTokenBrand = getGovernanceTokenBrand();
+  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
+  const governanceTokenKit = getGovernanceTokenKit();
 
   const terms = harden({
     ammPublicFacet: undefined,
     timerService: timer,
-    initialSupportedIssuers: issuers,
+    initialSupportedIssuers: initialIssuers,
     lockupStrategy: lockupStrategies.TIMED_LOCKUP,
     rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
-    gTokenBrand
+    gTokenBrand: governanceTokenKit.brand
   })
 
-  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms);
+  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
 
-  const issuerToSupport = getIssuer('Supp');
+  const { issuer: issuerToSupport } = getIssuer('Supp');
 
   await E(creatorFacet).addSupportedIssuer(issuerToSupport);
   const response = await E(publicFacet).isIssuerSupported(issuerToSupport);
@@ -57,37 +60,261 @@ test('able to add another supported issuer', async(t) => {
   t.is(response, true);
 })
 
+test('unable to add an already supported issuer', async (t) => {
+  const { zoe, installation, timer } = await setupContract();
+  const issuers = getInitialSupportedIssuers();
+  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
+  const governanceTokenKit = getGovernanceTokenKit();
 
-// test('zoe - mint payments', async (t) => {
-//   const { zoeService } = makeZoeKit(makeFakeVatAdmin().admin);
-//   const feePurse = E(zoeService).makeFeePurse();
-//   const zoe = E(zoeService).bindDefaultFeePurse(feePurse);
+  const terms = harden({
+    ammPublicFacet: undefined,
+    timerService: timer,
+    initialSupportedIssuers: initialIssuers,
+    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
+    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
+    gTokenBrand: governanceTokenKit.brand
+  })
 
-//   // pack the contract
-//   const bundle = await bundleSource(contractPath);
+  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
 
-//   // install the contract
-//   const installation = E(zoe).install(bundle);
+  await t.throwsAsync(E(creatorFacet).addSupportedIssuer(issuers.moola.issuer), {message: `Moola issuer is already supported`})
+})
 
-//   const { creatorFacet, instance } = await E(zoe).startInstance(installation);
+test('checks governance token liquidity', async (t) => {
+  const { zoe, installation, timer } = await setupContract();
+  const issuers = getInitialSupportedIssuers();
+  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
+  const governanceTokenKit = getGovernanceTokenKit();
 
-//   // Alice makes an invitation for Bob that will give him 1000 tokens
-//   const invitation = E(creatorFacet).makeInvitation();
+  const terms = harden({
+    ammPublicFacet: undefined,
+    timerService: timer,
+    initialSupportedIssuers: initialIssuers,
+    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
+    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
+    gTokenBrand: governanceTokenKit.brand
+  })
 
-//   // Bob makes an offer using the invitation
-//   const seat = E(zoe).offer(invitation);
+  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
 
-//   const paymentP = E(seat).getPayout('Token');
+  const response = await E(creatorFacet).checkGovernanceTokenLiquidity();
 
-//   // Let's get the tokenIssuer from the contract so we can evaluate
-//   // what we get as our payout
-//   const publicFacet = E(zoe).getPublicFacet(instance);
-//   const tokenIssuer = E(publicFacet).getTokenIssuer();
-//   const tokenBrand = await E(tokenIssuer).getBrand();
+  t.deepEqual(response, 0n);
+})
 
-//   const tokens1000 = AmountMath.make(tokenBrand, 1000n);
-//   const tokenPayoutAmount = await E(tokenIssuer).getAmountOf(paymentP);
+test('adds governance token liquidity', async (t) => {
+  const { zoe, installation, timer } = await setupContract();
+  const issuers = getInitialSupportedIssuers();
+  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
+  const governanceTokenKit = getGovernanceTokenKit();
 
-//   // Bob got 1000 tokens
-//   t.deepEqual(tokenPayoutAmount, tokens1000);
-// });
+  const terms = harden({
+    ammPublicFacet: undefined,
+    timerService: timer,
+    initialSupportedIssuers: initialIssuers,
+    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
+    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
+    gTokenBrand: governanceTokenKit.brand
+  });
+
+  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
+  const governanceAmount = AmountMath.make(governanceTokenKit.brand, 10n);
+
+  const proposal = harden({ give: { Governance: governanceAmount}});
+  const paymentKeywordRecord = harden({ Governance: governanceTokenKit.mint.mintPayment(governanceAmount) });
+  const invitation = await E(creatorFacet).makeAddRewardLiquidityInvitation();
+
+  const seat = await E(zoe).offer(
+    invitation,
+    proposal,
+    paymentKeywordRecord
+  );
+
+  const message = await E(seat).getOfferResult();
+
+  t.deepEqual(message, "Governance tokens liquidity increased by 10");
+
+  const governanceTokenLiquidity = await E(creatorFacet).checkGovernanceTokenLiquidity();
+
+  t.deepEqual(governanceTokenLiquidity, 10n);
+})
+
+test('locks with timed lockup', async (t) => {
+  const { zoe, installation, timer } = await setupContract();
+  const issuers = getInitialSupportedIssuers();
+  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
+  const governanceTokenKit = getGovernanceTokenKit();
+
+  const terms = harden({
+    ammPublicFacet: undefined,
+    timerService: timer,
+    initialSupportedIssuers: initialIssuers,
+    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
+    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
+    gTokenBrand: governanceTokenKit.brand
+  })
+
+  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
+  const polIssuer = await E(publicFacet).getPolTokenIssuer();
+  const polBrand = polIssuer.getBrand();
+
+  const moolaAmount = AmountMath.make(issuers.moola.brand, 5n);
+  const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
+  
+  const proposal = { give: { LpTokens: moolaAmount}, want: {PolToken: polAmount}};
+  const paymentKeywordRecord = harden({ LpTokens: issuers.moola.mint.mintPayment(moolaAmount)});
+  const invitation = await E(publicFacet).makeLockupInvitation();
+
+  const seat = await E(zoe).offer(invitation, proposal, paymentKeywordRecord, {bondingPeriod: 1})
+
+  const message = await E(seat).getOfferResult();
+
+  t.deepEqual(message.message, "Succeeded. Tokens locked.");
+  t.truthy(message.publicSubscribers);
+})
+
+test('locks with the unlock strategy', async (t) => {
+  const { zoe, installation, timer } = await setupContract();
+  const issuers = getInitialSupportedIssuers();
+  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
+  const governanceTokenKit = getGovernanceTokenKit();
+
+  const terms = harden({
+    ammPublicFacet: undefined,
+    timerService: timer,
+    initialSupportedIssuers: initialIssuers,
+    lockupStrategy: lockupStrategies.UNLOCK,
+    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
+    gTokenBrand: governanceTokenKit.brand
+  })
+
+  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
+  const polIssuer = await E(publicFacet).getPolTokenIssuer();
+  const polBrand = polIssuer.getBrand();
+
+  const moolaAmount = AmountMath.make(issuers.moola.brand, 5n);
+  const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
+  
+  const proposal = { give: { LpTokens: moolaAmount}, want: {PolToken: polAmount}};
+  const paymentKeywordRecord = harden({ LpTokens: issuers.moola.mint.mintPayment(moolaAmount)});
+  const invitation = await E(publicFacet).makeLockupInvitation();
+
+  const seat = await E(zoe).offer(invitation, proposal, paymentKeywordRecord)
+
+  const message = await E(seat).getOfferResult();
+
+  const payout = await E(seat).getPayout('PolToken');
+  const polToken = (await E(polIssuer).getAmountOf(payout)).value[0];
+  
+  t.deepEqual(polToken.amountLockedIn, 5n);
+  t.deepEqual(polToken.lockupId, '1');
+  t.deepEqual(message.message, "Succeeded. Tokens locked.");
+  t.truthy(message.publicSubscribers);
+})
+
+test('starts unbonding on an unlock strategy', async (t) => {
+  const { zoe, installation, timer } = await setupContract();
+  const issuers = getInitialSupportedIssuers();
+  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
+  const governanceTokenKit = getGovernanceTokenKit();
+
+  const terms = harden({
+    ammPublicFacet: undefined,
+    timerService: timer,
+    initialSupportedIssuers: initialIssuers,
+    lockupStrategy: lockupStrategies.UNLOCK,
+    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
+    gTokenBrand: governanceTokenKit.brand
+  })
+
+  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
+  const polIssuer = await E(publicFacet).getPolTokenIssuer();
+  const polBrand = polIssuer.getBrand();
+
+  const moolaAmount = AmountMath.make(issuers.moola.brand, 5n);
+  const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
+  
+  const proposal = { give: { LpTokens: moolaAmount}, want: {PolToken: polAmount}};
+  const paymentKeywordRecord = harden({ LpTokens: issuers.moola.mint.mintPayment(moolaAmount)});
+  const invitation = await E(publicFacet).makeLockupInvitation();
+
+  const seat = await E(zoe).offer(invitation, proposal, paymentKeywordRecord)
+
+  const message = await E(seat).getOfferResult();
+
+  const payout = await E(seat).getPayout('PolToken');
+  const polTokenAmount = await E(polIssuer).getAmountOf(payout);
+  const polToken = polTokenAmount.value[0];
+
+  t.deepEqual(polToken.amountLockedIn, 5n);
+  t.deepEqual(polToken.lockupId, '1');
+  t.deepEqual(message.message, "Succeeded. Tokens locked.");
+  t.truthy(message.publicSubscribers);
+
+  await timer.tick();
+
+  const renewedPolTokenPayment = await polIssuer.claim(payout, polTokenAmount);
+  const unlockProposal = { give: {PolToken: polTokenAmount}, want: {UnbondingToken: AmountMath.makeEmpty(polBrand, AssetKind.SET)}};
+  const unlockPaymentKeywordRecord = harden({ PolToken: renewedPolTokenPayment});
+  const unlockInvitation = await E(publicFacet).makeUnlockInvitation();
+
+  const unlockSeat = await E(zoe).offer(unlockInvitation, unlockProposal, unlockPaymentKeywordRecord, {unbondingPeriod: 1});
+
+  const unlockMessage = await E(unlockSeat).getOfferResult();
+
+  const unlockPayout = await E(unlockSeat).getPayout('UnbondingToken');
+  const unbondingTokenAmount = await E(polIssuer).getAmountOf(unlockPayout);
+  const unbondingToken = unbondingTokenAmount.value[0];
+
+  console.log(unbondingToken);
+
+  t.deepEqual(unbondingToken.amountLockedIn, 5n);
+  t.deepEqual(unbondingToken.lockupId, '1');
+  t.deepEqual(unbondingToken.unbondingPeriod, 1);
+  t.deepEqual(unbondingToken.unbondingTimestamp, 1n); // time has to have ticked to 1
+  t.deepEqual(unlockMessage.message, "Unlock operation succeeded");
+  t.truthy(unlockMessage.publicSubscribers);
+
+})
+
+test('does not allow unlock on a timed lockup', async (t) => {
+  const { zoe, installation, timer } = await setupContract();
+  const issuers = getInitialSupportedIssuers();
+  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
+  const governanceTokenKit = getGovernanceTokenKit();
+
+  const terms = harden({
+    ammPublicFacet: undefined,
+    timerService: timer,
+    initialSupportedIssuers: initialIssuers,
+    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
+    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
+    gTokenBrand: governanceTokenKit.brand
+  })
+
+  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
+  const polIssuer = await E(publicFacet).getPolTokenIssuer();
+  const polBrand = polIssuer.getBrand();
+
+  const moolaAmount = AmountMath.make(issuers.moola.brand, 5n);
+  const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
+  
+  const proposal = { give: { LpTokens: moolaAmount}, want: {PolToken: polAmount}};
+  const paymentKeywordRecord = harden({ LpTokens: issuers.moola.mint.mintPayment(moolaAmount)});
+  const invitation = await E(publicFacet).makeLockupInvitation();
+
+  const seat = await E(zoe).offer(invitation, proposal, paymentKeywordRecord, {bondingPeriod: 1})
+
+  const message = await E(seat).getOfferResult();
+
+  t.deepEqual(message.message, "Succeeded. Tokens locked.");
+  t.truthy(message.publicSubscribers);
+
+  await t.throwsAsync(E(publicFacet).makeUnlockInvitation(), {message: 'This contract does not support the unlocking strategy'});
+})
+
+// TODO: Test that we cannot lockup with an unknown LPToken brand
+// TODO: Test that we can withdraw rewards
+// TODO: Test that we can redeem our LP tokens
+// TODO: Test that we cannot redeem our LP tokens without withdrawing all rewards
+// TODO: Test the subscribers

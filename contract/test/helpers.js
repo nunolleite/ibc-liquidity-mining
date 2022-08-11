@@ -1,24 +1,26 @@
 import { makeIssuerKit } from "@agoric/ertp";
 
 const getInitialSupportedIssuers = () => {
-    const { issuer: moolaIssuer } = makeIssuerKit('Moola');
-    const { issuer: vanIssuer } = makeIssuerKit('Van');
+    const moolaKit = makeIssuerKit('Moola');
+    const vanKit = makeIssuerKit('Van');
 
-    return [moolaIssuer, vanIssuer];
+    return {
+        moola: moolaKit,
+        van: vanKit
+    };
 };
 
 const getIssuer = name => {
-    const { issuer } = makeIssuerKit(name);
-    return issuer;
+    const { issuer, mint, brand } = makeIssuerKit(name);
+    return { issuer, mint, brand };
 }
 
-const getGovernanceTokenBrand = () => {
-    const { brand: governanceTokenBrand } = makeIssuerKit('Gov');
-    return governanceTokenBrand;
+const getGovernanceTokenKit = () => {
+    return makeIssuerKit('Gov');
 }
 
 export {
     getInitialSupportedIssuers,
     getIssuer,
-    getGovernanceTokenBrand
+    getGovernanceTokenKit
 }

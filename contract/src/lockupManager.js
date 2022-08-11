@@ -2,8 +2,7 @@
 import '@agoric/zoe/exported.js';
 import { AmountMath } from "@agoric/ertp";
 import { makeSubscriptionKit } from "@agoric/notifier";
-import { E } from "@endo/eventual-send";
-import { Far } from "@endo/marshal";
+import { E, Far } from "@endo/far";
 import { lockupStrategies, rewardStrategyTypes } from "./definitions";
 import { daysToSeconds } from "./helpers";
 
@@ -72,9 +71,14 @@ export const makeLockupManager = (
     }
 
     /**
+     * @typedef {{
+     *  timeLockedIn: bigint,
+     *  hasPassed: Boolean
+     * }} TimeLockInformation */
+    /**
      * 
      * @param {bigint} currentTimestamp 
-     * @returns {Object} {timeLockedIn, hasPassed}
+     * @returns {TimeLockInformation}
      */
     const getTimeLockInformation = currentTimestamp => {
         let mostRecentConsideredTimestamp = 0n;
@@ -96,9 +100,16 @@ export const makeLockupManager = (
     }
 
     /**
+     * @typedef {{
+     *  expired: Boolean,
+     *  rewardsToCollect: Number,
+     *  message: String
+     * }} LockupState
+     */
+    /**
      * 
      * @param {bigint} currentTimestamp 
-     * @returns {Object}
+     * @returns {LockupState}
      */
     const checkLockupState = (currentTimestamp) => {
 
@@ -139,7 +150,7 @@ export const makeLockupManager = (
             lockupBondingPeriod = polTokenAmountValue.bondingPeriod;
         }
 
-        const newPolTokenAmount = AmountMath.make(polBrand, [polTokenAmountValue]);
+        const newPolTokenAmount = AmountMath.make(polBrand, harden([polTokenAmountValue]));
         polMint.mintGains(harden({ PolToken: newPolTokenAmount }), zcfSeat);
 
         zcfSeat.incrementBy(
@@ -172,11 +183,11 @@ export const makeLockupManager = (
         const currentTimestamp = await E(timerService).getCurrentTimestamp();
         unbondingTimestamp = currentTimestamp;
 
-        const newUnbondingTokenAmount = AmountMath.make(polBrand, [{
+        const newUnbondingTokenAmount = AmountMath.make(polBrand, harden([{
             ...polToken,
             unbondingPeriod: lockupUnbondingPeriod,
             unbondingTimestamp: currentTimestamp
-        }]);
+        }]));
 
         polMint.mintGains(harden({ UnbondingToken: newUnbondingTokenAmount }), zcfSeat);
 
@@ -254,7 +265,7 @@ export const makeLockupManager = (
         const currentState = checkLockupState(currentTimestamp);
         const { rewardsToCollect } = currentState;
         // The want clause is not an "equal", but an "at least"
-        assert(rewardsToCollect >= governanceTokenAmount.value, `You do not have enough rewards to collect the given amount: ${governanceTokenAmount.value}`);
+        assert(rewardsToCollect >= Number(governanceTokenAmount.value), `You do not have enough rewards to collect the given amount: ${governanceTokenAmount.value}`);
 
         userSeat.incrementBy(
             zcfSeat.decrementBy(harden({ Governance: governanceTokenAmount }))
