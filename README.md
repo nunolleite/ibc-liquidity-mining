@@ -22,17 +22,17 @@ On instantiation of the contract, the creator can choose what kind of liquity mi
 
 As any Agoric smart contract, it exposes two facets, the `creatorFacet` and the `publicFacet`. The first one can only be used by the creator and the second one can be used by anyone.
 The `creatorFacet` essentially exposes three operations:
-    - `addSupportedIssuer`, which receives an issuer and adds it to the the issuers that are supported in this contract, i.e., the issuers of the LP tokens that we can lock in this contract
-    - `checkGovernanceTokenLiquidity`, which quite simply returns the current liquidity of governance tokens in the contract
-    - `MakeAddRewardLiquidityInvitation`, which creates an invitation so that the creator can add more liquidity for the governance tokens in the contract.
+- `addSupportedIssuer`, which receives an issuer and adds it to the the issuers that are supported in this contract, i.e., the issuers of the LP tokens that we can lock in this contract
+- `checkGovernanceTokenLiquidity`, which quite simply returns the current liquidity of governance tokens in the contract
+- `MakeAddRewardLiquidityInvitation`, which creates an invitation so that the creator can add more liquidity for the governance tokens in the contract.
 
 The `publicFacet` exposes six operations:
-    - `getPolTokenIssuer`, which returns the issuer of the POL (Proof Of Lockup) tokens (These tokens will be discussed in greater detail in the `Process` section)
-    - `isIssuerSupported`, which simply verifies if the contract supports a given issuer
-    - `makeLockupInvitation`, which creates an invitation so that the user can lockup their tokens
-    - `makeUnlockInvitation`, which creates an invitation so that the user can unlock their tokens and start the unbonding period. Please note that this operation only makes sense if the contract's lockup strategy is of type `unlock`, otherwise an error will be thrown
-    - `makeRedeemInvitation`, which creates an invitation so that the user can redeem their LP Tokens. In order for this operation to work, the bonding period (in case of the `lock` strategy) or the unbonding period (in case of the `unlock` strategy) should have passed and all rewards should have been collected. An error is thrown if these two conditions are not met
-    - `makeWithdrawRewardsInvitation`, which creates an invitation for the user to withdraw the rewards that he has collected until that moment in an `at least` basis, i.e., the user specifies how many he should **at least** receive and the contract checks that, of course. Do note that the user is constantly warned how many rewards he can collect through the subscription.
+- `getPolTokenIssuer`, which returns the issuer of the POL (Proof Of Lockup) tokens (These tokens will be discussed in greater detail in the `Process` section)
+- `isIssuerSupported`, which simply verifies if the contract supports a given issuer
+- `makeLockupInvitation`, which creates an invitation so that the user can lockup their tokens
+- `makeUnlockInvitation`, which creates an invitation so that the user can unlock their tokens and start the unbonding period. Please note that this operation only makes sense if the contract's lockup strategy is of type `unlock`, otherwise an error will be thrown
+- `makeRedeemInvitation`, which creates an invitation so that the user can redeem their LP Tokens. In order for this operation to work, the bonding period (in case of the `lock` strategy) or the unbonding period (in case of the `unlock` strategy) should have passed and all rewards should have been collected. An error is thrown if these two conditions are not met
+- `makeWithdrawRewardsInvitation`, which creates an invitation for the user to withdraw the rewards that he has collected until that moment in an `at least` basis, i.e., the user specifies how many he should **at least** receive and the contract checks that, of course. Do note that the user is constantly warned how many rewards he can collect through the subscription.
 
 ### Process
 
