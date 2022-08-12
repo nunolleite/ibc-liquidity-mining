@@ -25,7 +25,7 @@ test('check correct initialization', async (t) => {
     gTokenBrand: governanceTokenKit.brand
   })
 
-  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
+  const { publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
 
   const { issuer: notSupportedIssuer} = getIssuer('Fake');
 
@@ -76,7 +76,7 @@ test('unable to add an already supported issuer', async (t) => {
     gTokenBrand: governanceTokenKit.brand
   })
 
-  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
+  const { creatorFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
 
   await t.throwsAsync(E(creatorFacet).addSupportedIssuer(issuers.moola.issuer), {message: `Moola issuer is already supported`})
 })
@@ -96,7 +96,7 @@ test('checks governance token liquidity', async (t) => {
     gTokenBrand: governanceTokenKit.brand
   })
 
-  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
+  const { creatorFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
 
   const response = await E(creatorFacet).checkGovernanceTokenLiquidity();
 
@@ -118,7 +118,7 @@ test('adds governance token liquidity', async (t) => {
     gTokenBrand: governanceTokenKit.brand
   });
 
-  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
+  const { creatorFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
   const governanceAmount = AmountMath.make(governanceTokenKit.brand, 10n);
 
   const proposal = harden({ give: { Governance: governanceAmount}});
@@ -155,7 +155,7 @@ test('locks with timed lockup', async (t) => {
     gTokenBrand: governanceTokenKit.brand
   })
 
-  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
+  const { publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
   const polIssuer = await E(publicFacet).getPolTokenIssuer();
   const polBrand = polIssuer.getBrand();
 
@@ -189,7 +189,7 @@ test('locks with the unlock strategy', async (t) => {
     gTokenBrand: governanceTokenKit.brand
   })
 
-  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
+  const { publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
   const polIssuer = await E(publicFacet).getPolTokenIssuer();
   const polBrand = polIssuer.getBrand();
 
@@ -228,7 +228,7 @@ test('starts unbonding on an unlock strategy', async (t) => {
     gTokenBrand: governanceTokenKit.brand
   })
 
-  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
+  const { publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
   const polIssuer = await E(publicFacet).getPolTokenIssuer();
   const polBrand = polIssuer.getBrand();
 
@@ -291,7 +291,7 @@ test('does not allow unlock on a timed lockup', async (t) => {
     gTokenBrand: governanceTokenKit.brand
   })
 
-  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
+  const { publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
   const polIssuer = await E(publicFacet).getPolTokenIssuer();
   const polBrand = polIssuer.getBrand();
 
@@ -638,7 +638,7 @@ test('can redeem', async (t) => {
   t.deepEqual(offerResult, "Tokens redeemed");
 })
 
-test('can withdraw rewards many times', async (t) => {
+test('can withdraw rewards iteratively', async (t) => {
   const { zoe, installation, timer } = await setupContract();
   const issuers = getInitialSupportedIssuers();
   const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
