@@ -721,4 +721,116 @@ test('can withdraw rewards iteratively', async (t) => {
   t.deepEqual(newAmount.value, 1n);
 })
 
-// TODO: Test the subscribers
+test('subscription notifies no rewards after lockup', async (t) => {
+  const { zoe, installation, timer } = await setupContract();
+  const issuers = getInitialSupportedIssuers();
+  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
+  const governanceTokenKit = getGovernanceTokenKit();
+
+  const terms = harden({
+    ammPublicFacet: undefined,
+    timerService: timer,
+    initialSupportedIssuers: initialIssuers,
+    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
+    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
+    gTokenBrand: governanceTokenKit.brand
+  })
+
+  const { publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
+  const polIssuer = await E(publicFacet).getPolTokenIssuer();
+  const polBrand = polIssuer.getBrand();
+
+  const moolaAmount = AmountMath.make(issuers.moola.brand, 5n);
+  const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
+  
+  const proposal = { give: { LpTokens: moolaAmount}, want: {PolToken: polAmount}};
+  const paymentKeywordRecord = harden({ LpTokens: issuers.moola.mint.mintPayment(moolaAmount)});
+  const invitation = await E(publicFacet).makeLockupInvitation();
+
+  const seat = await E(zoe).offer(invitation, proposal, paymentKeywordRecord, {bondingPeriod: 1})
+
+  const message = await E(seat).getOfferResult();
+
+  t.deepEqual(message.message, "Succeeded. Tokens locked.");
+  t.truthy(message.publicSubscribers);
+
+  const { subscription } = message.publicSubscribers;
+
+  const consume = async (subscription) => {
+    const notifications = [];
+    try {
+      for await (const value of subscription) {
+        notifications.push(value);
+        break;
+      }
+    } catch (reason) {
+
+    }
+
+    return notifications;
+  }
+
+  await timer.tickN(Number(SECONDS_PER_DAY) / 12); // Advance 2H
+  const notifications = await consume(subscription);
+  
+  t.is(notifications[0].expired, false);
+  t.deepEqual(notifications[0].rewardsToCollect, 0);
+  t.deepEqual(notifications[0].message, 'You currently have 0 governance tokens to collect.')
+});
+
+test('subscription notifies existent rewards after lockup', async (t) => {
+  const { zoe, installation, timer } = await setupContract();
+  const issuers = getInitialSupportedIssuers();
+  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
+  const governanceTokenKit = getGovernanceTokenKit();
+
+  const terms = harden({
+    ammPublicFacet: undefined,
+    timerService: timer,
+    initialSupportedIssuers: initialIssuers,
+    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
+    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 8 },
+    gTokenBrand: governanceTokenKit.brand
+  })
+
+  const { publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
+  const polIssuer = await E(publicFacet).getPolTokenIssuer();
+  const polBrand = polIssuer.getBrand();
+
+  const moolaAmount = AmountMath.make(issuers.moola.brand, 5n);
+  const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
+  
+  const proposal = { give: { LpTokens: moolaAmount}, want: {PolToken: polAmount}};
+  const paymentKeywordRecord = harden({ LpTokens: issuers.moola.mint.mintPayment(moolaAmount)});
+  const invitation = await E(publicFacet).makeLockupInvitation();
+
+  const seat = await E(zoe).offer(invitation, proposal, paymentKeywordRecord, {bondingPeriod: 1})
+
+  const message = await E(seat).getOfferResult();
+
+  t.deepEqual(message.message, "Succeeded. Tokens locked.");
+  t.truthy(message.publicSubscribers);
+
+  const { subscription } = message.publicSubscribers;
+
+  const consume = async (subscription) => {
+    const notifications = [];
+    try {
+      for await (const value of subscription) {
+        notifications.push(value);
+        break;
+      }
+    } catch (reason) {
+
+    }
+
+    return notifications;
+  }
+
+  await timer.tickN(Number(SECONDS_PER_DAY) / 12); // Advance 2H
+  const notifications = await consume(subscription);
+
+  t.is(notifications[0].expired, false);
+  t.deepEqual(notifications[0].rewardsToCollect, 1);
+  t.deepEqual(notifications[0].message, 'You currently have 1 governance tokens to collect.');
+})

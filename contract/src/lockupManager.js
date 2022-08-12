@@ -115,7 +115,7 @@ export const makeLockupManager = (
     const checkLockupState = (currentTimestamp) => {
 
         const { timeLockedIn, hasPassed } = getTimeLockInformation(currentTimestamp);
-        const currentRewards = calculateCurrentRewards(timeLockedIn);
+        const currentRewards = Number(Math.floor(calculateCurrentRewards(timeLockedIn)));
 
         let message = `You currently have ${currentRewards} governance tokens to collect.`;
         message += hasPassed ? 'Your token lockup has expired, no more rewards will be generated.' : ''
