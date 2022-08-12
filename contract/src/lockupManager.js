@@ -4,7 +4,7 @@ import { AmountMath } from "@agoric/ertp";
 import { makeSubscriptionKit } from "@agoric/notifier";
 import { E, Far } from "@endo/far";
 import { lockupStrategies, rewardStrategyTypes } from "./definitions";
-import { daysToSeconds } from "./helpers";
+import { daysToSeconds, secondsToDays } from "./helpers";
 
 /**
  * 
@@ -35,7 +35,7 @@ export const makeLockupManager = (
     amountLockedIn
 ) => {
     let lockupPublication = null;
-    let rewardsCollected = 0.0;
+    let rewardsCollected = 0;
     let lockupBondingPeriod = 0;
     let lockupUnbondingPeriod = 0;
     let lockingTimestamp = 0n;
@@ -44,13 +44,13 @@ export const makeLockupManager = (
 
     /**
      * 
-     * @param {bigint} timeLockedIn 
+     * @param {Number} timeLockedIn 
      * @returns {Number}
      */
     const calculateCurrentRewards = (timeLockedIn) => {
         const tokensLockedIn = BigInt(amountLockedIn.value.toString());
         if (rewardStrategyType === rewardStrategyTypes.LINEAR) {
-            return Number(tokensLockedIn * timeLockedIn * (rewardStrategyValue ? rewardStrategyValue : 1)) - rewardsCollected;
+            return Number(tokensLockedIn) * Number(timeLockedIn) * (rewardStrategyValue ? rewardStrategyValue : 1) - rewardsCollected;
         }
         if (rewardStrategyType === rewardStrategyTypes.CUSTOM) {
             return rewardStrategyValue(tokensLockedIn, timeLockedIn) - rewardsCollected;
@@ -72,7 +72,7 @@ export const makeLockupManager = (
 
     /**
      * @typedef {{
-     *  timeLockedIn: bigint,
+     *  timeLockedIn: Number,
      *  hasPassed: Boolean
      * }} TimeLockInformation */
     /**
@@ -86,17 +86,18 @@ export const makeLockupManager = (
 
         if (unbondingTimestamp) {
             const unbondingPeriodInSeconds = daysToSeconds(lockupUnbondingPeriod);
-            hasPassed = unbondingTimestamp + unbondingPeriodInSeconds > currentTimestamp;
+            hasPassed = unbondingTimestamp + unbondingPeriodInSeconds < currentTimestamp;
             mostRecentConsideredTimestamp = hasPassed ? lockingTimestamp + unbondingTimestamp + unbondingPeriodInSeconds : currentTimestamp
         }
 
         if (lockupBondingPeriod) {
             const bondingPeriodInSeconds = daysToSeconds(lockupBondingPeriod);
-            hasPassed = lockingTimestamp + bondingPeriodInSeconds > currentTimestamp;
+            hasPassed = lockingTimestamp + bondingPeriodInSeconds < currentTimestamp;
             mostRecentConsideredTimestamp = hasPassed ? lockingTimestamp + bondingPeriodInSeconds : currentTimestamp;
         }
 
-        return {timeLockedIn: mostRecentConsideredTimestamp - lockingTimestamp, hasPassed};
+        const timeLockedIn = secondsToDays(mostRecentConsideredTimestamp - lockingTimestamp);
+        return {timeLockedIn, hasPassed};
     }
 
     /**
@@ -221,10 +222,10 @@ export const makeLockupManager = (
         const currentTimestamp = await E(timerService).getCurrentTimestamp();
         if (lockupUnbondingPeriod) {
             const unbondingPeriodInSeconds = daysToSeconds(lockupUnbondingPeriod);
-            assert(unbondingTimestamp + unbondingPeriodInSeconds > currentTimestamp, `You are still in the unbonding period. Cannot redeem the LP tokens yet`);
+            assert(unbondingTimestamp + unbondingPeriodInSeconds < currentTimestamp, `You are still in the unbonding period. Cannot redeem the LP tokens yet`);
         } else {
             const bondingPeriodInSeconds = daysToSeconds(lockupBondingPeriod);
-            assert(lockingTimestamp + bondingPeriodInSeconds > currentTimestamp, `You are still in the bonding period. Cannot redeem tokens`);
+            assert(lockingTimestamp + bondingPeriodInSeconds < currentTimestamp, `You are still in the bonding period. Cannot redeem tokens`);
         }
 
         assert(lpTokensAmount.value === amountLockedIn.value, `The amount you are trying to redeem is diferent than the one locked in`);
@@ -232,7 +233,7 @@ export const makeLockupManager = (
 
         const { timeLockedIn } = getTimeLockInformation(currentTimestamp);
         const currentRewards = calculateCurrentRewards(timeLockedIn);
-        assert(currentRewards === 0.0, `Please collect all your rewards before redeeming your tokens, otherwise the rewards will be lost`);
+        assert(BigInt(Math.floor(currentRewards)) === 0n, `Please collect all your rewards before redeeming your tokens, otherwise the rewards will be lost`);
 
         userSeat.incrementBy(
             zcfSeat.decrementBy(harden({ LpTokens: lpTokensAmount }))
@@ -256,9 +257,10 @@ export const makeLockupManager = (
     /**
      * 
      * @param {ZCFSeat} userSeat 
+     * @param {Amount} totalGovernanceTokenSupply
      * @returns {Promise<Object>}
      */
-    const withdraw = async (userSeat) => {
+    const withdraw = async (userSeat, totalGovernanceTokenSupply) => {
         const { want: { Governance: governanceTokenAmount } } = userSeat.getProposal();
         const currentTimestamp = await E(timerService).getCurrentTimestamp();
         const currentState = checkLockupState(currentTimestamp);
@@ -266,17 +268,20 @@ export const makeLockupManager = (
         // The want clause is not an "equal", but an "at least"
         assert(rewardsToCollect >= Number(governanceTokenAmount.value), `You do not have enough rewards to collect the given amount: ${governanceTokenAmount.value}`);
 
+        let correctGovernanceTokenAmount = AmountMath.make(gTokenBrand, BigInt(Math.floor(rewardsToCollect)));
+        if (totalGovernanceTokenSupply < correctGovernanceTokenAmount) correctGovernanceTokenAmount = governanceTokenAmount;
+
+        // TODO: Maybe notify the creator that liquidity of governance tokens is running short
+
         userSeat.incrementBy(
-            zcfSeat.decrementBy(harden({ Governance: governanceTokenAmount }))
+            zcfSeat.decrementBy(harden({ Governance: correctGovernanceTokenAmount }))
         )
 
         zcf.reallocate(zcfSeat, userSeat);
 
-        rewardsCollected += Number(governanceTokenAmount.value);
-
-        userSeat.exit();
-
-        return `Successfully collected ${governanceTokenAmount.value} governance tokens`;
+        rewardsCollected += Number(correctGovernanceTokenAmount.value);
+        
+        return harden({message: `Successfully collected governance tokens`, amount: correctGovernanceTokenAmount});
     };
 
     /**

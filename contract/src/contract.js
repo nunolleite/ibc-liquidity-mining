@@ -196,7 +196,7 @@ const start = async (zcf) => {
    */
   const makeRedeemInvitation = () => {
 
-    const redeemHook = (userSeat) => {
+    const redeemHook = async (userSeat) => {
       assertProposalShape(userSeat, {
         give: { RedeemToken: null }, // RedeemToken is one of PolToken or UnbondingToken given before
         want: { LpTokens: null },
@@ -204,9 +204,8 @@ const start = async (zcf) => {
 
       const { give: { RedeemToken: redeemTokenAmount } } = userSeat.getProposal();
       const lockupManager = lockupsMap.get(redeemTokenAmount.value[0].lockupId);
-      const redeemResult = lockupManager.redeem(userSeat);
-
-      userSeat.exit();
+      const redeemResult = await lockupManager.redeem(userSeat);
+      
       return redeemResult;
     }
 
@@ -219,7 +218,7 @@ const start = async (zcf) => {
    */
   const makeWithdrawRewardsInvitation = () => {
 
-    const withdrawRewardsHook = (userSeat) => {
+    const withdrawRewardsHook = async (userSeat) => {
       assertProposalShape(userSeat, {
         give: { WithdrawToken: null },
         want: { Governance: null }
@@ -230,10 +229,10 @@ const start = async (zcf) => {
       assert(governanceTokenAmount.brand === gTokenBrand, `The given brand ${governanceTokenAmount.brand} is not the brand of the reward governance token`);
       assert(governanceTokenAmount.value < totalGovernanceTokenSupply.value, `There is not enough liquidity to reward that amount`);
       const lockupManager = lockupsMap.get(withdrawTokenAmount.value[0].lockupId);
-      const withdrawResult = lockupManager.withdraw(userSeat);
+      const withdrawResult = await lockupManager.withdraw(userSeat, totalGovernanceTokenSupply);
 
       // If we get here everything checked out and governance tokens were exchanged to the user
-      totalGovernanceTokenSupply = AmountMath.subtract(totalGovernanceTokenSupply, governanceTokenAmount);
+      totalGovernanceTokenSupply = AmountMath.subtract(totalGovernanceTokenSupply, withdrawResult.amount);
 
       userSeat.exit();
       return withdrawResult;

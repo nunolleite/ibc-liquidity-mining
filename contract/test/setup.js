@@ -16,7 +16,7 @@ const setupContract = async () => {
     const bundle = await bundleSource(contractPath);
     const installation = await E(zoe).install(bundle);
 
-    const timer = buildManualTimer(console.log);
+    const timer = buildManualTimer(message => {});
 
     return {
         zoe,

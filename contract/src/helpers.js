@@ -20,7 +20,7 @@ const daysToSeconds = numberOfDays => {
  */
 const secondsToDays = numberOfSeconds => {
     // We are not flooring this on purpose, to allow custom time rewards using the CUSTOM or LINEAR strategies
-    return numberOfSeconds / SECONDS_PER_DAY;
+    return Number(numberOfSeconds) / Number(SECONDS_PER_DAY);
 }
 
 /**
