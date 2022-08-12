@@ -225,9 +225,15 @@ const start = async (zcf) => {
         want: { Governance: null }
       });
 
-      const { give: { WithdrawToken: withdrawTokenAmount } } = userSeat.getProposal();
+      const { give: { WithdrawToken: withdrawTokenAmount }, want: { Governance: governanceTokenAmount } } = userSeat.getProposal();
+
+      assert(governanceTokenAmount.brand === gTokenBrand, `The given brand ${governanceTokenAmount.brand} is not the brand of the reward governance token`);
+      assert(governanceTokenAmount.value < totalGovernanceTokenSupply.value, `There is not enough liquidity to reward that amount`);
       const lockupManager = lockupsMap.get(withdrawTokenAmount.value[0].lockupId);
       const withdrawResult = lockupManager.withdraw(userSeat);
+
+      // If we get here everything checked out and governance tokens were exchanged to the user
+      totalGovernanceTokenSupply = AmountMath.subtract(totalGovernanceTokenSupply, governanceTokenAmount);
 
       userSeat.exit();
       return withdrawResult;

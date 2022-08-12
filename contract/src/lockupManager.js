@@ -260,7 +260,6 @@ export const makeLockupManager = (
      */
     const withdraw = async (userSeat) => {
         const { want: { Governance: governanceTokenAmount } } = userSeat.getProposal();
-        assert(governanceTokenAmount.brand === gTokenBrand, `The given brand ${governanceTokenAmount.brand} is not the brand of the reward governance token`);
         const currentTimestamp = await E(timerService).getCurrentTimestamp();
         const currentState = checkLockupState(currentTimestamp);
         const { rewardsToCollect } = currentState;
