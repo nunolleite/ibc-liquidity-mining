@@ -638,4 +638,87 @@ test('can redeem', async (t) => {
   t.deepEqual(offerResult, "Tokens redeemed");
 })
 
+test('can withdraw rewards many times', async (t) => {
+  const { zoe, installation, timer } = await setupContract();
+  const issuers = getInitialSupportedIssuers();
+  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
+  const governanceTokenKit = getGovernanceTokenKit();
+
+  const terms = harden({
+    ammPublicFacet: undefined,
+    timerService: timer,
+    initialSupportedIssuers: initialIssuers,
+    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
+    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
+    gTokenBrand: governanceTokenKit.brand
+  })
+
+  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
+  const polIssuer = await E(publicFacet).getPolTokenIssuer();
+  const polBrand = polIssuer.getBrand();
+
+  const moolaAmount = AmountMath.make(issuers.moola.brand, 5n);
+  const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
+  
+  const proposal = { give: { LpTokens: moolaAmount}, want: {PolToken: polAmount}};
+  const paymentKeywordRecord = harden({ LpTokens: issuers.moola.mint.mintPayment(moolaAmount)});
+  const invitation = await E(publicFacet).makeLockupInvitation();
+
+  const seat = await E(zoe).offer(invitation, proposal, paymentKeywordRecord, {bondingPeriod: 1})
+
+  const payout = await E(seat).getPayout('PolToken');
+  const polTokenAmount = await E(polIssuer).getAmountOf(payout);
+
+  const governanceAmount = AmountMath.make(governanceTokenKit.brand, 10n);
+  const addLiquidityProposal = harden({ give: { Governance: governanceAmount}});
+  const addLiquidityPaymentKeywordRecord = harden({ Governance: governanceTokenKit.mint.mintPayment(governanceAmount) });
+  const addLiquidityInvitation = await E(creatorFacet).makeAddRewardLiquidityInvitation();
+
+  const addLiquiditySeat = await E(zoe).offer(
+    addLiquidityInvitation,
+    addLiquidityProposal,
+    addLiquidityPaymentKeywordRecord
+  );
+
+  const addLiquidityMessage = await E(addLiquiditySeat).getOfferResult();
+
+  await timer.tickN(Number(SECONDS_PER_DAY) / 2);
+  const renewedTokenPayment = await polIssuer.claim(payout, polTokenAmount);
+  const withdrawalProposal = { give: { WithdrawToken: polTokenAmount }, want: { Governance: AmountMath.make(governanceTokenKit.brand, 1n)}};
+  const withdrawalPaymentKeywordRecord = harden({ WithdrawToken: renewedTokenPayment });
+  const withdrawalInvitation = await E(publicFacet).makeWithdrawRewardsInvitation();
+
+  const withdrawalSeat = await E(zoe).offer(withdrawalInvitation, withdrawalProposal, withdrawalPaymentKeywordRecord);
+
+  const withdrawalMessage = await E(withdrawalSeat).getOfferResult();
+
+  t.deepEqual(withdrawalMessage.message, 'Successfully collected governance tokens')
+
+  const withdrawalPayout = await E(withdrawalSeat).getPayout('Governance');
+  const amount = await E(governanceTokenKit.issuer).getAmountOf(withdrawalPayout);
+  const withdrawalTokenPayout = await E(withdrawalSeat).getPayout('WithdrawToken');
+  const withdrawalTokenAmount = await E(polIssuer).getAmountOf(withdrawalTokenPayout);
+
+  t.deepEqual(amount.brand, governanceTokenKit.brand);
+  t.deepEqual(amount.value, 1n);
+
+  await timer.tickN(Number(SECONDS_PER_DAY) / 2);
+
+  const newTokenPayment = await polIssuer.claim(withdrawalTokenPayout, withdrawalTokenAmount);
+  const newWithdrawalProposal = { give: {WithdrawToken: withdrawalTokenAmount}, want: {Governance: AmountMath.make(governanceTokenKit.brand, 1n)}};
+  const newWithdrawalPaymentKeywordRecord = harden({ WithdrawToken: newTokenPayment });
+  const newWithdrawalInvitation = await E(publicFacet).makeWithdrawRewardsInvitation();
+
+  const newWithdrawalSeat = await E(zoe).offer(newWithdrawalInvitation, newWithdrawalProposal, newWithdrawalPaymentKeywordRecord);
+
+  const newWithdrawalMessage = await E(newWithdrawalSeat).getOfferResult();
+  t.deepEqual(newWithdrawalMessage.message, 'Successfully collected governance tokens');
+
+  const newWithdrawalPayout = await E(newWithdrawalSeat).getPayout('Governance');
+  const newAmount = await E(governanceTokenKit.issuer).getAmountOf(newWithdrawalPayout);
+
+  t.deepEqual(newAmount.brand, governanceTokenKit.brand);
+  t.deepEqual(newAmount.value, 1n);
+})
+
 // TODO: Test the subscribers
