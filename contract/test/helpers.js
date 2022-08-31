@@ -1,4 +1,4 @@
-import { makeIssuerKit } from "@agoric/ertp";
+import { AmountMath, AssetKind, makeIssuerKit } from "@agoric/ertp";
 import { E } from '@endo/far';
 
 const getInitialSupportedIssuers = () => {
@@ -20,35 +20,49 @@ const getGovernanceTokenKit = () => {
     return makeIssuerKit('Gov');
 }
 
-const getAddRewardLiquiditySeat = async (zoe, creatorFacet, governanceTokenKit, governanceAmount) => {
-    const proposal = harden({ give: { Governance: governanceAmount }});
-    const paymentKeywordRecord = harden({ Governance: governanceTokenKit.mint.mintPayment(governanceAmount)});
-    const invitation = await E(creatorFacet).makeAddRewardLiquidityInvitation();
-
-    return await E(zoe).offer(
-        invitation,
-        proposal,
-        paymentKeywordRecord
-    )
-};
-
-const getLockupSeat = async (zoe, publicFacet, lpTokensMint, lpTokensAmount, polTokenAmount, offerArgs) => {
-    const proposal = { give: { LpTokens: lpTokensAmount }, want: { PolToken: polTokenAmount }};
-    const paymentKeywordRecord = harden({ LpTokens: lpTokensMint.mintPayment(lpTokensAmount)});
-    const invitation = await E(publicFacet).makeLockupInvitation();
-
+const getSeat = async (zoe, invitation, proposal, paymentKeywordRecord, offerArgs = {}) => {
     return await E(zoe).offer(
         invitation,
         proposal,
         paymentKeywordRecord,
         offerArgs
     )
+};
+
+const getAddRewardLiquiditySeat = async (zoe, creatorFacet, governanceTokenKit, governanceAmount) => {
+    return await getSeat(
+        zoe,
+        await E(creatorFacet).makeAddRewardLiquidityInvitation(),
+        harden({ give: { Governance: governanceAmount }}),
+        harden({ Governance: governanceTokenKit.mint.mintPayment(governanceAmount)})
+    )
+};
+
+const getLockupSeat = async (zoe, publicFacet, lpTokensMint, lpTokensAmount, polTokenAmount, offerArgs) => {
+    return await getSeat(
+        zoe,
+        await E(publicFacet).makeLockupInvitation(),
+        { give: { LpTokens: lpTokensAmount}, want: { PolToken: polTokenAmount }},
+        harden({ LpTokens: lpTokensMint.mintPayment(lpTokensAmount) }),
+        offerArgs
+    )
 }
+
+const getUnlockSeat = async (zoe, publicFacet, polTokenAmount, polBrand, payment, offerArgs) => {
+    return await getSeat(
+        zoe,
+        await E(publicFacet).makeUnlockInvitation(),
+        { give: { PolToken: polTokenAmount }, want: { UnbondingToken: AmountMath.makeEmpty(polBrand, AssetKind.SET)}},
+        harden({ PolToken: payment }),
+        offerArgs
+    )
+};
 
 export {
     getInitialSupportedIssuers,
     getIssuer,
     getGovernanceTokenKit,
     getAddRewardLiquiditySeat,
-    getLockupSeat
+    getLockupSeat,
+    getUnlockSeat
 }

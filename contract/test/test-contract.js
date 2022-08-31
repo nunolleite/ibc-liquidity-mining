@@ -5,7 +5,7 @@ import { test } from '@agoric/zoe/tools/prepare-test-env-ava.js';
 import { E } from '@endo/far';
 
 import { setupContract, initializeContract } from "./setup.js";
-import { getAddRewardLiquiditySeat, getIssuer, getLockupSeat } from './helpers.js';
+import { getAddRewardLiquiditySeat, getIssuer, getLockupSeat, getUnlockSeat } from './helpers.js';
 import { AmountMath, AssetKind } from '@agoric/ertp';
 import { SECONDS_PER_DAY } from '../src/helpers.js';
 import { lockupStrategies, rewardStrategyTypes } from '../src/definitions.js';
@@ -134,11 +134,8 @@ test('starts unbonding on an unlock strategy', async (t) => {
   await timer.tick();
 
   const renewedPolTokenPayment = await polIssuer.claim(payout, polTokenAmount);
-  const unlockProposal = { give: {PolToken: polTokenAmount}, want: {UnbondingToken: AmountMath.makeEmpty(polBrand, AssetKind.SET)}};
-  const unlockPaymentKeywordRecord = harden({ PolToken: renewedPolTokenPayment});
-  const unlockInvitation = await E(publicFacet).makeUnlockInvitation();
 
-  const unlockSeat = await E(zoe).offer(unlockInvitation, unlockProposal, unlockPaymentKeywordRecord, {unbondingPeriod: 1});
+  const unlockSeat = await getUnlockSeat(zoe, publicFacet, polTokenAmount, polBrand, renewedPolTokenPayment, { unbondingPeriod: 1 });
 
   const unlockMessage = await E(unlockSeat).getOfferResult();
 
@@ -155,7 +152,7 @@ test('starts unbonding on an unlock strategy', async (t) => {
 
 })
 
-test('does not allow unlock on a timed lockup', async (t) => {
+test('does not allow unlock on a timed lockup contract', async (t) => {
   const { zoe, installation, timer } = await setupContract();
   const { issuers, publicFacet } = await initializeContract(zoe, installation, timer);
   const polIssuer = await E(publicFacet).getPolTokenIssuer();
@@ -190,17 +187,10 @@ test('can withdraw rewards', async (t) => {
   const polTokenAmount = await E(polIssuer).getAmountOf(payout);
 
   const governanceAmount = AmountMath.make(governanceTokenKit.brand, 10n);
-  const addLiquidityProposal = harden({ give: { Governance: governanceAmount}});
-  const addLiquidityPaymentKeywordRecord = harden({ Governance: governanceTokenKit.mint.mintPayment(governanceAmount) });
-  const addLiquidityInvitation = await E(creatorFacet).makeAddRewardLiquidityInvitation();
 
-  const addLiquiditySeat = await E(zoe).offer(
-    addLiquidityInvitation,
-    addLiquidityProposal,
-    addLiquidityPaymentKeywordRecord
-  );
+  const addLiquiditySeat = await getAddRewardLiquiditySeat(zoe, creatorFacet, governanceTokenKit, governanceAmount);
 
-  const addLiquidityMessage = await E(addLiquiditySeat).getOfferResult();
+  await E(addLiquiditySeat).getOfferResult();
 
   await timer.tickN(Number(SECONDS_PER_DAY) / 2);
   const renewedTokenPayment = await polIssuer.claim(payout, polTokenAmount);
@@ -237,17 +227,9 @@ test('cannot redeem without collecting rewards', async (t) => {
   const polTokenAmount = await E(polIssuer).getAmountOf(payout);
 
   const governanceAmount = AmountMath.make(governanceTokenKit.brand, 10n);
-  const addLiquidityProposal = harden({ give: { Governance: governanceAmount}});
-  const addLiquidityPaymentKeywordRecord = harden({ Governance: governanceTokenKit.mint.mintPayment(governanceAmount) });
-  const addLiquidityInvitation = await E(creatorFacet).makeAddRewardLiquidityInvitation();
+  const addLiquiditySeat = await getAddRewardLiquiditySeat(zoe, creatorFacet, governanceTokenKit, governanceAmount);
 
-  const addLiquiditySeat = await E(zoe).offer(
-    addLiquidityInvitation,
-    addLiquidityProposal,
-    addLiquidityPaymentKeywordRecord
-  );
-
-  const addLiquidityMessage = await E(addLiquiditySeat).getOfferResult();
+  await E(addLiquiditySeat).getOfferResult();
 
   await timer.tickN(Number(SECONDS_PER_DAY * 2n));
 
@@ -277,17 +259,8 @@ test('cannot redeem without bonding period having passed', async (t) => {
   const polTokenAmount = await E(polIssuer).getAmountOf(payout);
 
   const governanceAmount = AmountMath.make(governanceTokenKit.brand, 10n);
-  const addLiquidityProposal = harden({ give: { Governance: governanceAmount}});
-  const addLiquidityPaymentKeywordRecord = harden({ Governance: governanceTokenKit.mint.mintPayment(governanceAmount) });
-  const addLiquidityInvitation = await E(creatorFacet).makeAddRewardLiquidityInvitation();
-
-  const addLiquiditySeat = await E(zoe).offer(
-    addLiquidityInvitation,
-    addLiquidityProposal,
-    addLiquidityPaymentKeywordRecord
-  );
-
-  const addLiquidityMessage = await E(addLiquiditySeat).getOfferResult();
+  const addLiquiditySeat = await getAddRewardLiquiditySeat(zoe, creatorFacet, governanceTokenKit, governanceAmount);
+  await E(addLiquiditySeat).getOfferResult();
 
   await timer.tickN(Number(SECONDS_PER_DAY) / 2);
 
@@ -317,17 +290,8 @@ test('cannot redeem with different locked in amount', async (t) => {
   const polTokenAmount = await E(polIssuer).getAmountOf(payout);
 
   const governanceAmount = AmountMath.make(governanceTokenKit.brand, 10n);
-  const addLiquidityProposal = harden({ give: { Governance: governanceAmount}});
-  const addLiquidityPaymentKeywordRecord = harden({ Governance: governanceTokenKit.mint.mintPayment(governanceAmount) });
-  const addLiquidityInvitation = await E(creatorFacet).makeAddRewardLiquidityInvitation();
-
-  const addLiquiditySeat = await E(zoe).offer(
-    addLiquidityInvitation,
-    addLiquidityProposal,
-    addLiquidityPaymentKeywordRecord
-  );
-
-  const addLiquidityMessage = await E(addLiquiditySeat).getOfferResult();
+  const addLiquiditySeat = await getAddRewardLiquiditySeat(zoe, creatorFacet, governanceTokenKit, governanceAmount);
+  await E(addLiquiditySeat).getOfferResult();
 
   await timer.tickN(Number(SECONDS_PER_DAY * 2n));
 
@@ -371,17 +335,8 @@ test('can redeem', async (t) => {
   const polTokenAmount = await E(polIssuer).getAmountOf(payout);
 
   const governanceAmount = AmountMath.make(governanceTokenKit.brand, 10n);
-  const addLiquidityProposal = harden({ give: { Governance: governanceAmount}});
-  const addLiquidityPaymentKeywordRecord = harden({ Governance: governanceTokenKit.mint.mintPayment(governanceAmount) });
-  const addLiquidityInvitation = await E(creatorFacet).makeAddRewardLiquidityInvitation();
-
-  const addLiquiditySeat = await E(zoe).offer(
-    addLiquidityInvitation,
-    addLiquidityProposal,
-    addLiquidityPaymentKeywordRecord
-  );
-
-  const addLiquidityMessage = await E(addLiquiditySeat).getOfferResult();
+  const addLiquiditySeat = await getAddRewardLiquiditySeat(zoe, creatorFacet, governanceTokenKit, governanceAmount);
+  await E(addLiquiditySeat).getOfferResult();
 
   await timer.tickN(Number(SECONDS_PER_DAY * 2n));
 
@@ -436,17 +391,8 @@ test('can withdraw rewards iteratively', async (t) => {
   const polTokenAmount = await E(polIssuer).getAmountOf(payout);
 
   const governanceAmount = AmountMath.make(governanceTokenKit.brand, 10n);
-  const addLiquidityProposal = harden({ give: { Governance: governanceAmount}});
-  const addLiquidityPaymentKeywordRecord = harden({ Governance: governanceTokenKit.mint.mintPayment(governanceAmount) });
-  const addLiquidityInvitation = await E(creatorFacet).makeAddRewardLiquidityInvitation();
-
-  const addLiquiditySeat = await E(zoe).offer(
-    addLiquidityInvitation,
-    addLiquidityProposal,
-    addLiquidityPaymentKeywordRecord
-  );
-
-  const addLiquidityMessage = await E(addLiquiditySeat).getOfferResult();
+  const addLiquiditySeat = await getAddRewardLiquiditySeat(zoe, creatorFacet, governanceTokenKit, governanceAmount);
+  await E(addLiquiditySeat).getOfferResult();
 
   await timer.tickN(Number(SECONDS_PER_DAY) / 2);
   const renewedTokenPayment = await polIssuer.claim(payout, polTokenAmount);
