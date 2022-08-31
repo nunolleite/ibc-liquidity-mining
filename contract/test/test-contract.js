@@ -3,29 +3,16 @@
 import { test } from '@agoric/zoe/tools/prepare-test-env-ava.js';
 
 import { E } from '@endo/eventual-send';
-import { lockupStrategies, rewardStrategyTypes } from '../src/definitions.js';
 
-import {setupContract, initializeContract } from "./setup.js";
-import {getInitialSupportedIssuers, getGovernanceTokenKit, getIssuer} from './helpers.js';
+import { setupContract, initializeContract } from "./setup.js";
+import { getIssuer } from './helpers.js';
 import { AmountMath, AssetKind } from '@agoric/ertp';
 import { SECONDS_PER_DAY } from '../src/helpers.js';
+import { lockupStrategies, rewardStrategyTypes } from '../src/definitions.js';
 
 test('check correct initialization', async (t) => {
   const { zoe, installation, timer } = await setupContract();
-  const issuers = getInitialSupportedIssuers();
-  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
-  const governanceTokenKit = getGovernanceTokenKit();
-
-  const terms = harden({
-    ammPublicFacet: undefined,
-    timerService: timer,
-    initialSupportedIssuers: initialIssuers,
-    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
-    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
-    gTokenBrand: governanceTokenKit.brand
-  })
-
-  const { publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
+  const {issuers, publicFacet } = await initializeContract(zoe, installation, timer);
 
   const { issuer: notSupportedIssuer} = getIssuer('Fake');
 
@@ -38,20 +25,7 @@ test('check correct initialization', async (t) => {
 
 test('able to add another supported issuer', async(t) => {
   const { zoe, installation, timer } = await setupContract();
-  const issuers = getInitialSupportedIssuers();
-  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
-  const governanceTokenKit = getGovernanceTokenKit();
-
-  const terms = harden({
-    ammPublicFacet: undefined,
-    timerService: timer,
-    initialSupportedIssuers: initialIssuers,
-    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
-    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
-    gTokenBrand: governanceTokenKit.brand
-  })
-
-  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
+  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, timer);
 
   const { issuer: issuerToSupport } = getIssuer('Supp');
 
@@ -63,40 +37,14 @@ test('able to add another supported issuer', async(t) => {
 
 test('unable to add an already supported issuer', async (t) => {
   const { zoe, installation, timer } = await setupContract();
-  const issuers = getInitialSupportedIssuers();
-  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
-  const governanceTokenKit = getGovernanceTokenKit();
-
-  const terms = harden({
-    ammPublicFacet: undefined,
-    timerService: timer,
-    initialSupportedIssuers: initialIssuers,
-    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
-    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
-    gTokenBrand: governanceTokenKit.brand
-  })
-
-  const { creatorFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
+  const { issuers, creatorFacet } = await initializeContract(zoe, installation, timer);
 
   await t.throwsAsync(E(creatorFacet).addSupportedIssuer(issuers.moola.issuer), {message: `Moola issuer is already supported`})
 })
 
 test('checks governance token liquidity', async (t) => {
   const { zoe, installation, timer } = await setupContract();
-  const issuers = getInitialSupportedIssuers();
-  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
-  const governanceTokenKit = getGovernanceTokenKit();
-
-  const terms = harden({
-    ammPublicFacet: undefined,
-    timerService: timer,
-    initialSupportedIssuers: initialIssuers,
-    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
-    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
-    gTokenBrand: governanceTokenKit.brand
-  })
-
-  const { creatorFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
+  const { creatorFacet } = await initializeContract(zoe, installation, timer);
 
   const response = await E(creatorFacet).checkGovernanceTokenLiquidity();
 
@@ -105,20 +53,7 @@ test('checks governance token liquidity', async (t) => {
 
 test('adds governance token liquidity', async (t) => {
   const { zoe, installation, timer } = await setupContract();
-  const issuers = getInitialSupportedIssuers();
-  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
-  const governanceTokenKit = getGovernanceTokenKit();
-
-  const terms = harden({
-    ammPublicFacet: undefined,
-    timerService: timer,
-    initialSupportedIssuers: initialIssuers,
-    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
-    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
-    gTokenBrand: governanceTokenKit.brand
-  });
-
-  const { creatorFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
+  const { issuers, governanceTokenKit, creatorFacet } = await initializeContract(zoe, installation, timer);
   const governanceAmount = AmountMath.make(governanceTokenKit.brand, 10n);
 
   const proposal = harden({ give: { Governance: governanceAmount}});
@@ -142,20 +77,8 @@ test('adds governance token liquidity', async (t) => {
 
 test('locks with timed lockup', async (t) => {
   const { zoe, installation, timer } = await setupContract();
-  const issuers = getInitialSupportedIssuers();
-  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
-  const governanceTokenKit = getGovernanceTokenKit();
+  const { issuers, publicFacet } = await initializeContract(zoe, installation, timer);
 
-  const terms = harden({
-    ammPublicFacet: undefined,
-    timerService: timer,
-    initialSupportedIssuers: initialIssuers,
-    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
-    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
-    gTokenBrand: governanceTokenKit.brand
-  })
-
-  const { publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
   const polIssuer = await E(publicFacet).getPolTokenIssuer();
   const polBrand = polIssuer.getBrand();
 
@@ -176,20 +99,8 @@ test('locks with timed lockup', async (t) => {
 
 test('locks with the unlock strategy', async (t) => {
   const { zoe, installation, timer } = await setupContract();
-  const issuers = getInitialSupportedIssuers();
-  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
-  const governanceTokenKit = getGovernanceTokenKit();
+  const { issuers, publicFacet} = await initializeContract(zoe, installation, timer, lockupStrategies.UNLOCK);
 
-  const terms = harden({
-    ammPublicFacet: undefined,
-    timerService: timer,
-    initialSupportedIssuers: initialIssuers,
-    lockupStrategy: lockupStrategies.UNLOCK,
-    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
-    gTokenBrand: governanceTokenKit.brand
-  })
-
-  const { publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
   const polIssuer = await E(publicFacet).getPolTokenIssuer();
   const polBrand = polIssuer.getBrand();
 
@@ -215,20 +126,8 @@ test('locks with the unlock strategy', async (t) => {
 
 test('starts unbonding on an unlock strategy', async (t) => {
   const { zoe, installation, timer } = await setupContract();
-  const issuers = getInitialSupportedIssuers();
-  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
-  const governanceTokenKit = getGovernanceTokenKit();
+  const { issuers, publicFacet } = await initializeContract(zoe, installation, timer, lockupStrategies.UNLOCK);
 
-  const terms = harden({
-    ammPublicFacet: undefined,
-    timerService: timer,
-    initialSupportedIssuers: initialIssuers,
-    lockupStrategy: lockupStrategies.UNLOCK,
-    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
-    gTokenBrand: governanceTokenKit.brand
-  })
-
-  const { publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
   const polIssuer = await E(publicFacet).getPolTokenIssuer();
   const polBrand = polIssuer.getBrand();
 
@@ -278,20 +177,7 @@ test('starts unbonding on an unlock strategy', async (t) => {
 
 test('does not allow unlock on a timed lockup', async (t) => {
   const { zoe, installation, timer } = await setupContract();
-  const issuers = getInitialSupportedIssuers();
-  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
-  const governanceTokenKit = getGovernanceTokenKit();
-
-  const terms = harden({
-    ammPublicFacet: undefined,
-    timerService: timer,
-    initialSupportedIssuers: initialIssuers,
-    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
-    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
-    gTokenBrand: governanceTokenKit.brand
-  })
-
-  const { publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
+  const { issuers, publicFacet } = await initializeContract(zoe, installation, timer);
   const polIssuer = await E(publicFacet).getPolTokenIssuer();
   const polBrand = polIssuer.getBrand();
 
@@ -314,20 +200,8 @@ test('does not allow unlock on a timed lockup', async (t) => {
 
 test('can withdraw rewards', async (t) => {
   const { zoe, installation, timer } = await setupContract();
-  const issuers = getInitialSupportedIssuers();
-  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
-  const governanceTokenKit = getGovernanceTokenKit();
+  const { issuers, creatorFacet, publicFacet, governanceTokenKit } = await initializeContract(zoe, installation, timer);
 
-  const terms = harden({
-    ammPublicFacet: undefined,
-    timerService: timer,
-    initialSupportedIssuers: initialIssuers,
-    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
-    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
-    gTokenBrand: governanceTokenKit.brand
-  })
-
-  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
   const polIssuer = await E(publicFacet).getPolTokenIssuer();
   const polBrand = polIssuer.getBrand();
 
@@ -377,20 +251,8 @@ test('can withdraw rewards', async (t) => {
 
 test('cannot redeem without collecting rewards', async (t) => {
   const { zoe, installation, timer } = await setupContract();
-  const issuers = getInitialSupportedIssuers();
-  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
-  const governanceTokenKit = getGovernanceTokenKit();
+  const { issuers, creatorFacet, publicFacet, governanceTokenKit } = await initializeContract(zoe, installation, timer);
 
-  const terms = harden({
-    ammPublicFacet: undefined,
-    timerService: timer,
-    initialSupportedIssuers: initialIssuers,
-    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
-    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
-    gTokenBrand: governanceTokenKit.brand
-  })
-
-  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
   const polIssuer = await E(publicFacet).getPolTokenIssuer();
   const polBrand = polIssuer.getBrand();
 
@@ -433,20 +295,8 @@ test('cannot redeem without collecting rewards', async (t) => {
 
 test('cannot redeem without bonding period having passed', async (t) => {
   const { zoe, installation, timer } = await setupContract();
-  const issuers = getInitialSupportedIssuers();
-  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
-  const governanceTokenKit = getGovernanceTokenKit();
+  const { issuers, creatorFacet, publicFacet, governanceTokenKit } = await initializeContract(zoe, installation, timer);
 
-  const terms = harden({
-    ammPublicFacet: undefined,
-    timerService: timer,
-    initialSupportedIssuers: initialIssuers,
-    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
-    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
-    gTokenBrand: governanceTokenKit.brand
-  })
-
-  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
   const polIssuer = await E(publicFacet).getPolTokenIssuer();
   const polBrand = polIssuer.getBrand();
 
@@ -489,20 +339,8 @@ test('cannot redeem without bonding period having passed', async (t) => {
 
 test('cannot redeem with different locked in amount', async (t) => {
   const { zoe, installation, timer } = await setupContract();
-  const issuers = getInitialSupportedIssuers();
-  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
-  const governanceTokenKit = getGovernanceTokenKit();
+  const { issuers, creatorFacet, publicFacet, governanceTokenKit } = await initializeContract(zoe, installation, timer);
 
-  const terms = harden({
-    ammPublicFacet: undefined,
-    timerService: timer,
-    initialSupportedIssuers: initialIssuers,
-    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
-    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
-    gTokenBrand: governanceTokenKit.brand
-  })
-
-  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
   const polIssuer = await E(publicFacet).getPolTokenIssuer();
   const polBrand = polIssuer.getBrand();
 
@@ -559,20 +397,8 @@ test('cannot redeem with different locked in amount', async (t) => {
 
 test('can redeem', async (t) => {
   const { zoe, installation, timer } = await setupContract();
-  const issuers = getInitialSupportedIssuers();
-  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
-  const governanceTokenKit = getGovernanceTokenKit();
+  const { issuers, creatorFacet, publicFacet, governanceTokenKit } = await initializeContract(zoe, installation, timer);
 
-  const terms = harden({
-    ammPublicFacet: undefined,
-    timerService: timer,
-    initialSupportedIssuers: initialIssuers,
-    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
-    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
-    gTokenBrand: governanceTokenKit.brand
-  })
-
-  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
   const polIssuer = await E(publicFacet).getPolTokenIssuer();
   const polBrand = polIssuer.getBrand();
 
@@ -640,20 +466,8 @@ test('can redeem', async (t) => {
 
 test('can withdraw rewards iteratively', async (t) => {
   const { zoe, installation, timer } = await setupContract();
-  const issuers = getInitialSupportedIssuers();
-  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
-  const governanceTokenKit = getGovernanceTokenKit();
+  const { issuers, creatorFacet, publicFacet, governanceTokenKit } = await initializeContract(zoe, installation, timer);
 
-  const terms = harden({
-    ammPublicFacet: undefined,
-    timerService: timer,
-    initialSupportedIssuers: initialIssuers,
-    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
-    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
-    gTokenBrand: governanceTokenKit.brand
-  })
-
-  const { creatorFacet, publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
   const polIssuer = await E(publicFacet).getPolTokenIssuer();
   const polBrand = polIssuer.getBrand();
 
@@ -723,20 +537,8 @@ test('can withdraw rewards iteratively', async (t) => {
 
 test('subscription notifies no rewards after lockup', async (t) => {
   const { zoe, installation, timer } = await setupContract();
-  const issuers = getInitialSupportedIssuers();
-  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
-  const governanceTokenKit = getGovernanceTokenKit();
+  const { issuers, publicFacet } = await initializeContract(zoe, installation, timer);
 
-  const terms = harden({
-    ammPublicFacet: undefined,
-    timerService: timer,
-    initialSupportedIssuers: initialIssuers,
-    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
-    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 0.5 },
-    gTokenBrand: governanceTokenKit.brand
-  })
-
-  const { publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
   const polIssuer = await E(publicFacet).getPolTokenIssuer();
   const polBrand = polIssuer.getBrand();
 
@@ -780,20 +582,14 @@ test('subscription notifies no rewards after lockup', async (t) => {
 
 test('subscription notifies existent rewards after lockup', async (t) => {
   const { zoe, installation, timer } = await setupContract();
-  const issuers = getInitialSupportedIssuers();
-  const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
-  const governanceTokenKit = getGovernanceTokenKit();
+  const { issuers, publicFacet } = await initializeContract(
+    zoe,
+    installation,
+    timer,
+    lockupStrategies.TIMED_LOCKUP,
+    { type: rewardStrategyTypes.LINEAR, definition: 8 }
+  );
 
-  const terms = harden({
-    ammPublicFacet: undefined,
-    timerService: timer,
-    initialSupportedIssuers: initialIssuers,
-    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
-    rewardStrategy: { type: rewardStrategyTypes.LINEAR, definition: 8 },
-    gTokenBrand: governanceTokenKit.brand
-  })
-
-  const { publicFacet } = await initializeContract(zoe, installation, terms, { Governance: governanceTokenKit.issuer });
   const polIssuer = await E(publicFacet).getPolTokenIssuer();
   const polBrand = polIssuer.getBrand();
 

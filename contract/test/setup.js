@@ -5,6 +5,8 @@ import { makeFakeVatAdmin } from "@agoric/zoe/tools/fakeVatAdmin.js"
 import bundleSource from "@endo/bundle-source";
 import { E } from "@endo/eventual-send";
 import buildManualTimer from "@agoric/zoe/tools/manualTimer.js"
+import { getGovernanceTokenKit, getInitialSupportedIssuers } from "./helpers.js";
+import { lockupStrategies, rewardStrategyTypes } from "../src/definitions.js";
 
 const setupContract = async () => {
     const { zoeService } = makeZoeKit(makeFakeVatAdmin().admin);
@@ -25,14 +27,39 @@ const setupContract = async () => {
     }
 };
 
-const initializeContract = async (zoe, installation, terms, issuerKeywordRecord) => {
+const initializeContract = async (zoe, installation, timer, lockupStrategy = "", rewardsStrategy = {}) => {
+    const issuers = getInitialSupportedIssuers();
+    const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
+    const governanceTokenKit = getGovernanceTokenKit();
+    let decidedLockStrategy, decidedRewardsStrategy;
+
+    if (lockupStrategy === "") decidedLockStrategy = lockupStrategies.TIMED_LOCKUP;
+    else decidedLockStrategy = lockupStrategy;
+
+    if (!rewardsStrategy.type) decidedRewardsStrategy = { type: rewardStrategyTypes.LINEAR, definition: 0.5};
+    else decidedRewardsStrategy = rewardsStrategy;
+
+    const terms = harden({
+        ammPublicFacet: undefined,
+        timerService: timer,
+        initialSupportedIssuers: initialIssuers,
+        lockupStrategy: decidedLockStrategy,
+        rewardStrategy: decidedRewardsStrategy,
+        gTokenBrand: governanceTokenKit.brand
+    });
+
     const { creatorFacet, publicFacet } = await E(zoe).startInstance(
         installation,
-        issuerKeywordRecord,
+        { Governance: governanceTokenKit.issuer },
         terms
-      );
-    
-      return { creatorFacet, publicFacet };
+    );
+
+    return {
+        governanceTokenKit,
+        issuers,
+        creatorFacet,
+        publicFacet
+    };
 }
 
 export {
