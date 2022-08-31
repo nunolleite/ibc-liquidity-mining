@@ -2,10 +2,10 @@
 
 import { test } from '@agoric/zoe/tools/prepare-test-env-ava.js';
 
-import { E } from '@endo/eventual-send';
+import { E } from '@endo/far';
 
 import { setupContract, initializeContract } from "./setup.js";
-import { getIssuer } from './helpers.js';
+import { getAddRewardLiquiditySeat, getIssuer, getLockupSeat } from './helpers.js';
 import { AmountMath, AssetKind } from '@agoric/ertp';
 import { SECONDS_PER_DAY } from '../src/helpers.js';
 import { lockupStrategies, rewardStrategyTypes } from '../src/definitions.js';
@@ -53,18 +53,10 @@ test('checks governance token liquidity', async (t) => {
 
 test('adds governance token liquidity', async (t) => {
   const { zoe, installation, timer } = await setupContract();
-  const { issuers, governanceTokenKit, creatorFacet } = await initializeContract(zoe, installation, timer);
+  const { governanceTokenKit, creatorFacet } = await initializeContract(zoe, installation, timer);
   const governanceAmount = AmountMath.make(governanceTokenKit.brand, 10n);
 
-  const proposal = harden({ give: { Governance: governanceAmount}});
-  const paymentKeywordRecord = harden({ Governance: governanceTokenKit.mint.mintPayment(governanceAmount) });
-  const invitation = await E(creatorFacet).makeAddRewardLiquidityInvitation();
-
-  const seat = await E(zoe).offer(
-    invitation,
-    proposal,
-    paymentKeywordRecord
-  );
+  const seat = await getAddRewardLiquiditySeat(zoe, creatorFacet, governanceTokenKit, governanceAmount);
 
   const message = await E(seat).getOfferResult();
 
@@ -84,12 +76,8 @@ test('locks with timed lockup', async (t) => {
 
   const moolaAmount = AmountMath.make(issuers.moola.brand, 5n);
   const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
-  
-  const proposal = { give: { LpTokens: moolaAmount}, want: {PolToken: polAmount}};
-  const paymentKeywordRecord = harden({ LpTokens: issuers.moola.mint.mintPayment(moolaAmount)});
-  const invitation = await E(publicFacet).makeLockupInvitation();
 
-  const seat = await E(zoe).offer(invitation, proposal, paymentKeywordRecord, {bondingPeriod: 1})
+  const seat = await getLockupSeat(zoe, publicFacet, issuers.moola.mint, moolaAmount, polAmount, { bondingPeriod: 1 });
 
   const message = await E(seat).getOfferResult();
 
@@ -107,11 +95,7 @@ test('locks with the unlock strategy', async (t) => {
   const moolaAmount = AmountMath.make(issuers.moola.brand, 5n);
   const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
   
-  const proposal = { give: { LpTokens: moolaAmount}, want: {PolToken: polAmount}};
-  const paymentKeywordRecord = harden({ LpTokens: issuers.moola.mint.mintPayment(moolaAmount)});
-  const invitation = await E(publicFacet).makeLockupInvitation();
-
-  const seat = await E(zoe).offer(invitation, proposal, paymentKeywordRecord)
+  const seat = await getLockupSeat(zoe, publicFacet, issuers.moola.mint, moolaAmount, polAmount);
 
   const message = await E(seat).getOfferResult();
 
@@ -134,11 +118,7 @@ test('starts unbonding on an unlock strategy', async (t) => {
   const moolaAmount = AmountMath.make(issuers.moola.brand, 5n);
   const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
   
-  const proposal = { give: { LpTokens: moolaAmount}, want: {PolToken: polAmount}};
-  const paymentKeywordRecord = harden({ LpTokens: issuers.moola.mint.mintPayment(moolaAmount)});
-  const invitation = await E(publicFacet).makeLockupInvitation();
-
-  const seat = await E(zoe).offer(invitation, proposal, paymentKeywordRecord)
+  const seat = await getLockupSeat(zoe, publicFacet, issuers.moola.mint, moolaAmount, polAmount);
 
   const message = await E(seat).getOfferResult();
 
@@ -184,11 +164,7 @@ test('does not allow unlock on a timed lockup', async (t) => {
   const moolaAmount = AmountMath.make(issuers.moola.brand, 5n);
   const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
   
-  const proposal = { give: { LpTokens: moolaAmount}, want: {PolToken: polAmount}};
-  const paymentKeywordRecord = harden({ LpTokens: issuers.moola.mint.mintPayment(moolaAmount)});
-  const invitation = await E(publicFacet).makeLockupInvitation();
-
-  const seat = await E(zoe).offer(invitation, proposal, paymentKeywordRecord, {bondingPeriod: 1})
+  const seat = await getLockupSeat(zoe, publicFacet, issuers.moola.mint, moolaAmount, polAmount, { bondingPeriod: 1 });
 
   const message = await E(seat).getOfferResult();
 
@@ -208,11 +184,7 @@ test('can withdraw rewards', async (t) => {
   const moolaAmount = AmountMath.make(issuers.moola.brand, 5n);
   const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
   
-  const proposal = { give: { LpTokens: moolaAmount}, want: {PolToken: polAmount}};
-  const paymentKeywordRecord = harden({ LpTokens: issuers.moola.mint.mintPayment(moolaAmount)});
-  const invitation = await E(publicFacet).makeLockupInvitation();
-
-  const seat = await E(zoe).offer(invitation, proposal, paymentKeywordRecord, {bondingPeriod: 1})
+  const seat = await getLockupSeat(zoe, publicFacet, issuers.moola.mint, moolaAmount, polAmount, { bondingPeriod: 1 });
 
   const payout = await E(seat).getPayout('PolToken');
   const polTokenAmount = await E(polIssuer).getAmountOf(payout);
@@ -259,11 +231,7 @@ test('cannot redeem without collecting rewards', async (t) => {
   const moolaAmount = AmountMath.make(issuers.moola.brand, 5n);
   const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
   
-  const proposal = { give: { LpTokens: moolaAmount}, want: {PolToken: polAmount}};
-  const paymentKeywordRecord = harden({ LpTokens: issuers.moola.mint.mintPayment(moolaAmount)});
-  const invitation = await E(publicFacet).makeLockupInvitation();
-
-  const seat = await E(zoe).offer(invitation, proposal, paymentKeywordRecord, {bondingPeriod: 1})
+  const seat = await getLockupSeat(zoe, publicFacet, issuers.moola.mint, moolaAmount, polAmount, { bondingPeriod: 1 });
 
   const payout = await E(seat).getPayout('PolToken');
   const polTokenAmount = await E(polIssuer).getAmountOf(payout);
@@ -303,11 +271,7 @@ test('cannot redeem without bonding period having passed', async (t) => {
   const moolaAmount = AmountMath.make(issuers.moola.brand, 5n);
   const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
   
-  const proposal = { give: { LpTokens: moolaAmount}, want: {PolToken: polAmount}};
-  const paymentKeywordRecord = harden({ LpTokens: issuers.moola.mint.mintPayment(moolaAmount)});
-  const invitation = await E(publicFacet).makeLockupInvitation();
-
-  const seat = await E(zoe).offer(invitation, proposal, paymentKeywordRecord, {bondingPeriod: 1})
+  const seat = await getLockupSeat(zoe, publicFacet, issuers.moola.mint, moolaAmount, polAmount, { bondingPeriod: 1 });
 
   const payout = await E(seat).getPayout('PolToken');
   const polTokenAmount = await E(polIssuer).getAmountOf(payout);
@@ -347,11 +311,7 @@ test('cannot redeem with different locked in amount', async (t) => {
   const moolaAmount = AmountMath.make(issuers.moola.brand, 5n);
   const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
   
-  const proposal = { give: { LpTokens: moolaAmount}, want: {PolToken: polAmount}};
-  const paymentKeywordRecord = harden({ LpTokens: issuers.moola.mint.mintPayment(moolaAmount)});
-  const invitation = await E(publicFacet).makeLockupInvitation();
-
-  const seat = await E(zoe).offer(invitation, proposal, paymentKeywordRecord, {bondingPeriod: 1})
+  const seat = await getLockupSeat(zoe, publicFacet, issuers.moola.mint, moolaAmount, polAmount, { bondingPeriod: 1 });
 
   const payout = await E(seat).getPayout('PolToken');
   const polTokenAmount = await E(polIssuer).getAmountOf(payout);
@@ -405,11 +365,7 @@ test('can redeem', async (t) => {
   const moolaAmount = AmountMath.make(issuers.moola.brand, 5n);
   const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
   
-  const proposal = { give: { LpTokens: moolaAmount}, want: {PolToken: polAmount}};
-  const paymentKeywordRecord = harden({ LpTokens: issuers.moola.mint.mintPayment(moolaAmount)});
-  const invitation = await E(publicFacet).makeLockupInvitation();
-
-  const seat = await E(zoe).offer(invitation, proposal, paymentKeywordRecord, {bondingPeriod: 1})
+  const seat = await getLockupSeat(zoe, publicFacet, issuers.moola.mint, moolaAmount, polAmount, { bondingPeriod: 1 });
 
   const payout = await E(seat).getPayout('PolToken');
   const polTokenAmount = await E(polIssuer).getAmountOf(payout);
@@ -474,11 +430,7 @@ test('can withdraw rewards iteratively', async (t) => {
   const moolaAmount = AmountMath.make(issuers.moola.brand, 5n);
   const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
   
-  const proposal = { give: { LpTokens: moolaAmount}, want: {PolToken: polAmount}};
-  const paymentKeywordRecord = harden({ LpTokens: issuers.moola.mint.mintPayment(moolaAmount)});
-  const invitation = await E(publicFacet).makeLockupInvitation();
-
-  const seat = await E(zoe).offer(invitation, proposal, paymentKeywordRecord, {bondingPeriod: 1})
+  const seat = await getLockupSeat(zoe, publicFacet, issuers.moola.mint, moolaAmount, polAmount, { bondingPeriod: 1 });
 
   const payout = await E(seat).getPayout('PolToken');
   const polTokenAmount = await E(polIssuer).getAmountOf(payout);
@@ -545,11 +497,7 @@ test('subscription notifies no rewards after lockup', async (t) => {
   const moolaAmount = AmountMath.make(issuers.moola.brand, 5n);
   const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
   
-  const proposal = { give: { LpTokens: moolaAmount}, want: {PolToken: polAmount}};
-  const paymentKeywordRecord = harden({ LpTokens: issuers.moola.mint.mintPayment(moolaAmount)});
-  const invitation = await E(publicFacet).makeLockupInvitation();
-
-  const seat = await E(zoe).offer(invitation, proposal, paymentKeywordRecord, {bondingPeriod: 1})
+  const seat = await getLockupSeat(zoe, publicFacet, issuers.moola.mint, moolaAmount, polAmount, { bondingPeriod: 1 });
 
   const message = await E(seat).getOfferResult();
 
@@ -596,11 +544,7 @@ test('subscription notifies existent rewards after lockup', async (t) => {
   const moolaAmount = AmountMath.make(issuers.moola.brand, 5n);
   const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
   
-  const proposal = { give: { LpTokens: moolaAmount}, want: {PolToken: polAmount}};
-  const paymentKeywordRecord = harden({ LpTokens: issuers.moola.mint.mintPayment(moolaAmount)});
-  const invitation = await E(publicFacet).makeLockupInvitation();
-
-  const seat = await E(zoe).offer(invitation, proposal, paymentKeywordRecord, {bondingPeriod: 1})
+  const seat = await getLockupSeat(zoe, publicFacet, issuers.moola.mint, moolaAmount, polAmount, { bondingPeriod: 1 });
 
   const message = await E(seat).getOfferResult();
 
