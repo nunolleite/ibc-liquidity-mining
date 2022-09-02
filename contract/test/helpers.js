@@ -58,11 +58,31 @@ const getUnlockSeat = async (zoe, publicFacet, polTokenAmount, polBrand, payment
     )
 };
 
+const getRedeemSeat = async (zoe, publicFacet, polTokenAmount, tokensAmount, payment) => {
+    return await getSeat(
+        zoe,
+        await E(publicFacet).makeRedeemInvitation(),
+        { give: { RedeemToken: polTokenAmount }, want: { LpTokens: tokensAmount }},
+        harden({ RedeemToken: payment })
+    )
+};
+
+const getWithdrawSeat = async (zoe, publicFacet, polTokenAmount, governanceTokenBrand, governanceAmountValue, payment) => {
+    return await getSeat(
+        zoe,
+        await E(publicFacet).makeWithdrawRewardsInvitation(),
+        { give: { WithdrawToken: polTokenAmount }, want: { Governance: AmountMath.make(governanceTokenBrand, governanceAmountValue)}},
+        harden({ WithdrawToken: payment })
+    )
+};
+
 export {
     getInitialSupportedIssuers,
     getIssuer,
     getGovernanceTokenKit,
     getAddRewardLiquiditySeat,
     getLockupSeat,
-    getUnlockSeat
+    getUnlockSeat,
+    getRedeemSeat,
+    getWithdrawSeat
 }

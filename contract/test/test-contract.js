@@ -5,7 +5,7 @@ import { test } from '@agoric/zoe/tools/prepare-test-env-ava.js';
 import { E } from '@endo/far';
 
 import { setupContract, initializeContract } from "./setup.js";
-import { getAddRewardLiquiditySeat, getIssuer, getLockupSeat, getUnlockSeat } from './helpers.js';
+import { getAddRewardLiquiditySeat, getIssuer, getLockupSeat, getRedeemSeat, getUnlockSeat, getWithdrawSeat } from './helpers.js';
 import { AmountMath, AssetKind } from '@agoric/ertp';
 import { SECONDS_PER_DAY } from '../src/helpers.js';
 import { lockupStrategies, rewardStrategyTypes } from '../src/definitions.js';
@@ -194,11 +194,7 @@ test('can withdraw rewards', async (t) => {
 
   await timer.tickN(Number(SECONDS_PER_DAY) / 2);
   const renewedTokenPayment = await polIssuer.claim(payout, polTokenAmount);
-  const withdrawalProposal = { give: { WithdrawToken: polTokenAmount }, want: { Governance: AmountMath.make(governanceTokenKit.brand, 1n)}};
-  const withdrawalPaymentKeywordRecord = harden({ WithdrawToken: renewedTokenPayment });
-  const withdrawalInvitation = await E(publicFacet).makeWithdrawRewardsInvitation();
-
-  const withdrawalSeat = await E(zoe).offer(withdrawalInvitation, withdrawalProposal, withdrawalPaymentKeywordRecord);
+  const withdrawalSeat = await getWithdrawSeat(zoe, publicFacet, polTokenAmount, governanceTokenKit.brand, 1n, renewedTokenPayment);
 
   const withdrawalMessage = await E(withdrawalSeat).getOfferResult();
 
@@ -234,11 +230,7 @@ test('cannot redeem without collecting rewards', async (t) => {
   await timer.tickN(Number(SECONDS_PER_DAY * 2n));
 
   const renewedTokenPayment = await (polIssuer).claim(payout, polTokenAmount);
-  const redeemProposal = { give: { RedeemToken: polTokenAmount }, want: { LpTokens: moolaAmount }};
-  const redeemPayment = harden({ RedeemToken: renewedTokenPayment });
-  const redeemInvitation = await E(publicFacet).makeRedeemInvitation();
-
-  const rSeat = await E(zoe).offer(redeemInvitation, redeemProposal, redeemPayment);
+  const rSeat = await getRedeemSeat(zoe, publicFacet, polTokenAmount, moolaAmount, renewedTokenPayment);
 
   await t.throwsAsync(E(rSeat).getOfferResult(), {message: `Please collect all your rewards before redeeming your tokens, otherwise the rewards will be lost`});
 })
@@ -265,11 +257,7 @@ test('cannot redeem without bonding period having passed', async (t) => {
   await timer.tickN(Number(SECONDS_PER_DAY) / 2);
 
   const renewedTokenPayment = await (polIssuer).claim(payout, polTokenAmount);
-  const redeemProposal = { give: { RedeemToken: polTokenAmount }, want: { LpTokens: moolaAmount }};
-  const redeemPayment = harden({ RedeemToken: renewedTokenPayment });
-  const redeemInvitation = await E(publicFacet).makeRedeemInvitation();
-
-  const rSeat = await E(zoe).offer(redeemInvitation, redeemProposal, redeemPayment);
+  const rSeat = await getRedeemSeat(zoe, publicFacet, polTokenAmount, moolaAmount, renewedTokenPayment);
 
   await t.throwsAsync(E(rSeat).getOfferResult(), {message: `You are still in the bonding period. Cannot redeem tokens`});
 })
@@ -296,11 +284,7 @@ test('cannot redeem with different locked in amount', async (t) => {
   await timer.tickN(Number(SECONDS_PER_DAY * 2n));
 
   const renewedTokenPayment = await polIssuer.claim(payout, polTokenAmount);
-  const withdrawalProposal = { give: { WithdrawToken: polTokenAmount }, want: { Governance: AmountMath.make(governanceTokenKit.brand, 1n)}};
-  const withdrawalPaymentKeywordRecord = harden({ WithdrawToken: renewedTokenPayment });
-  const withdrawalInvitation = await E(publicFacet).makeWithdrawRewardsInvitation();
-
-  const withdrawalSeat = await E(zoe).offer(withdrawalInvitation, withdrawalProposal, withdrawalPaymentKeywordRecord);
+  const withdrawalSeat = await getWithdrawSeat(zoe, publicFacet, polTokenAmount, governanceTokenKit.brand, 1n, renewedTokenPayment);
 
   const withdrawalMessage = await E(withdrawalSeat).getOfferResult();
 
@@ -310,11 +294,7 @@ test('cannot redeem with different locked in amount', async (t) => {
   const withdrawalTokenAmount = await E(polIssuer).getAmountOf(withdrawalTokenPayout);
 
   const newTokenPayment = await (polIssuer).claim(withdrawalTokenPayout, withdrawalTokenAmount);
-  const redeemProposal = { give: { RedeemToken: polTokenAmount }, want: { LpTokens: AmountMath.make(issuers.moola.brand, 6n)}};
-  const redeemPayment = harden({ RedeemToken: newTokenPayment });
-  const redeemInvitation = await E(publicFacet).makeRedeemInvitation();
-
-  const rSeat = await E(zoe).offer(redeemInvitation, redeemProposal, redeemPayment);
+  const rSeat = await getRedeemSeat(zoe, publicFacet, polTokenAmount, AmountMath.make(issuers.moola.brand, 6n), newTokenPayment);
 
   await t.throwsAsync(E(rSeat).getOfferResult(), {message: `The amount you are trying to redeem is diferent than the one locked in`});
 })
@@ -341,11 +321,7 @@ test('can redeem', async (t) => {
   await timer.tickN(Number(SECONDS_PER_DAY * 2n));
 
   const renewedTokenPayment = await polIssuer.claim(payout, polTokenAmount);
-  const withdrawalProposal = { give: { WithdrawToken: polTokenAmount }, want: { Governance: AmountMath.make(governanceTokenKit.brand, 1n)}};
-  const withdrawalPaymentKeywordRecord = harden({ WithdrawToken: renewedTokenPayment });
-  const withdrawalInvitation = await E(publicFacet).makeWithdrawRewardsInvitation();
-
-  const withdrawalSeat = await E(zoe).offer(withdrawalInvitation, withdrawalProposal, withdrawalPaymentKeywordRecord);
+  const withdrawalSeat = await getWithdrawSeat(zoe, publicFacet, polTokenAmount, governanceTokenKit.brand, 1n, renewedTokenPayment);
 
   const withdrawalMessage = await E(withdrawalSeat).getOfferResult();
 
@@ -360,11 +336,7 @@ test('can redeem', async (t) => {
   t.deepEqual(governanceTokenAmount.value, 2n);
 
   const newTokenPayment = await (polIssuer).claim(withdrawalTokenPayout, withdrawalTokenAmount);
-  const redeemProposal = { give: { RedeemToken: polTokenAmount }, want: { LpTokens: moolaAmount}};
-  const redeemPayment = harden({ RedeemToken: newTokenPayment });
-  const redeemInvitation = await E(publicFacet).makeRedeemInvitation();
-
-  const rSeat = await E(zoe).offer(redeemInvitation, redeemProposal, redeemPayment);
+  const rSeat = await getRedeemSeat(zoe, publicFacet, polTokenAmount, moolaAmount, newTokenPayment);
 
   const offerResult = await E(rSeat).getOfferResult();
   const tokenPayout = await E(rSeat).getPayout('LpTokens');
@@ -396,11 +368,7 @@ test('can withdraw rewards iteratively', async (t) => {
 
   await timer.tickN(Number(SECONDS_PER_DAY) / 2);
   const renewedTokenPayment = await polIssuer.claim(payout, polTokenAmount);
-  const withdrawalProposal = { give: { WithdrawToken: polTokenAmount }, want: { Governance: AmountMath.make(governanceTokenKit.brand, 1n)}};
-  const withdrawalPaymentKeywordRecord = harden({ WithdrawToken: renewedTokenPayment });
-  const withdrawalInvitation = await E(publicFacet).makeWithdrawRewardsInvitation();
-
-  const withdrawalSeat = await E(zoe).offer(withdrawalInvitation, withdrawalProposal, withdrawalPaymentKeywordRecord);
+  const withdrawalSeat = await getWithdrawSeat(zoe, publicFacet, polTokenAmount, governanceTokenKit.brand, 1n, renewedTokenPayment);
 
   const withdrawalMessage = await E(withdrawalSeat).getOfferResult();
 
@@ -417,11 +385,7 @@ test('can withdraw rewards iteratively', async (t) => {
   await timer.tickN(Number(SECONDS_PER_DAY) / 2);
 
   const newTokenPayment = await polIssuer.claim(withdrawalTokenPayout, withdrawalTokenAmount);
-  const newWithdrawalProposal = { give: {WithdrawToken: withdrawalTokenAmount}, want: {Governance: AmountMath.make(governanceTokenKit.brand, 1n)}};
-  const newWithdrawalPaymentKeywordRecord = harden({ WithdrawToken: newTokenPayment });
-  const newWithdrawalInvitation = await E(publicFacet).makeWithdrawRewardsInvitation();
-
-  const newWithdrawalSeat = await E(zoe).offer(newWithdrawalInvitation, newWithdrawalProposal, newWithdrawalPaymentKeywordRecord);
+  const newWithdrawalSeat = await getWithdrawSeat(zoe, publicFacet, polTokenAmount, governanceTokenKit.brand, 1n, newTokenPayment);
 
   const newWithdrawalMessage = await E(newWithdrawalSeat).getOfferResult();
   t.deepEqual(newWithdrawalMessage.message, 'Successfully collected governance tokens');
