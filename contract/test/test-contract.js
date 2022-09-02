@@ -85,6 +85,73 @@ test('locks with timed lockup', async (t) => {
   t.truthy(message.publicSubscribers);
 })
 
+test('locks with a tier-based reward strategy', async (t) => {
+  const { zoe, installation, timer } = await setupContract();
+  const { issuers, publicFacet } = await initializeContract(
+    zoe,
+    installation,
+    timer,
+    lockupStrategies.TIMED_LOCKUP,
+    {
+      type: rewardStrategyTypes.TIER,
+      definition: [
+        {
+          timeAmount: 1,
+          tokenAmount: 1
+        },
+        {
+          timeAmount: 7,
+          tokenAmount: 10
+        },
+        {
+          timeAmount: 30,
+          tokenAmount: 35
+        }
+      ]
+    }
+    )
+
+    const polIssuer = await E(publicFacet).getPolTokenIssuer();
+    const polBrand = polIssuer.getBrand();
+
+    const moolaAmount = AmountMath.make(issuers.moola.brand, 5n);
+    const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
+
+    const seat = await getLockupSeat(zoe, publicFacet, issuers.moola.mint, moolaAmount, polAmount, { bondingPeriod: 20 });
+
+    const message = await E(seat).getOfferResult();
+
+    t.deepEqual(message.message, "Succeeded. Tokens locked.");
+    t.truthy(message.publicSubscribers);
+})
+
+test('locks with a custom reward strategy', async (t) => {
+  const { zoe, installation, timer } = await setupContract();
+  const { issuers, publicFacet } = await initializeContract(
+    zoe,
+    installation,
+    timer,
+    lockupStrategies.TIMED_LOCKUP,
+    {
+      type: rewardStrategyTypes.CUSTOM,
+      definition: (tokensLockedIn, timeLockedIn) => {return (tokensLockedIn * timeLockedIn * 2) - 1;}
+    }
+  )
+
+  const polIssuer = await E(publicFacet).getPolTokenIssuer();
+  const polBrand = polIssuer.getBrand();
+
+  const moolaAmount = AmountMath.make(issuers.moola.brand, 5n);
+  const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
+
+  const seat = await getLockupSeat(zoe, publicFacet, issuers.moola.mint, moolaAmount, polAmount, { bondingPeriod: 20 });
+
+  const message = await E(seat).getOfferResult();
+
+  t.deepEqual(message.message, "Succeeded. Tokens locked.");
+  t.truthy(message.publicSubscribers);
+})
+
 test('locks with the unlock strategy', async (t) => {
   const { zoe, installation, timer } = await setupContract();
   const { issuers, publicFacet} = await initializeContract(zoe, installation, timer, lockupStrategies.UNLOCK);
@@ -484,3 +551,6 @@ test('subscription notifies existent rewards after lockup', async (t) => {
   t.deepEqual(notifications[0].rewardsToCollect, 1);
   t.deepEqual(notifications[0].message, 'You currently have 1 governance tokens to collect.');
 })
+
+// TODO: Add some additional test cases for withdrawing rewards and redeeming with an unlock strategy
+// TODO: Add some additional test cases for the tier and custom rewards strategies

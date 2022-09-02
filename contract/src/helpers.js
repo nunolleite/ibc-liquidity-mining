@@ -28,7 +28,7 @@ const secondsToDays = numberOfSeconds => {
  * @param {Array<Object>} tiers 
  */
 const orderTiers = tiers => {
-    tiers.sort((a, b) => a.timeAmount < b.timeAmount ? -1 : 1);
+    return tiers.slice().sort((a, b) => a.timeAmount < b.timeAmount ? -1 : 1);
 }
 
 harden(daysToSeconds);
