@@ -552,5 +552,4 @@ test('subscription notifies existent rewards after lockup', async (t) => {
   t.deepEqual(notifications[0].message, 'You currently have 1 governance tokens to collect.');
 })
 
-// TODO: Add some additional test cases for withdrawing rewards and redeeming with an unlock strategy
-// TODO: Add some additional test cases for the tier and custom rewards strategies
+// TODO: Add some additional test cases for withdrawing rewards with a custom and tier-based strategy
