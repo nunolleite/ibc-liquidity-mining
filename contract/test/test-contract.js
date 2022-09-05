@@ -552,4 +552,140 @@ test('subscription notifies existent rewards after lockup', async (t) => {
   t.deepEqual(notifications[0].message, 'You currently have 1 governance tokens to collect.');
 })
 
-// TODO: Add some additional test cases for withdrawing rewards with a custom and tier-based strategy
+test('withdraws rewards on a tier based strategy', async (t) => {
+  const { zoe, installation, timer } = await setupContract();
+  const { issuers, creatorFacet, publicFacet, governanceTokenKit } = await initializeContract(
+    zoe,
+    installation,
+    timer,
+    lockupStrategies.TIMED_LOCKUP,
+    {
+      type: rewardStrategyTypes.TIER,
+      definition: [
+        {
+          timeAmount: 1,
+          tokenAmount: 1
+        },
+        {
+          timeAmount: 7,
+          tokenAmount: 10
+        },
+        {
+          timeAmount: 30,
+          tokenAmount: 35
+        }
+      ]
+    }
+  );
+
+  const polIssuer = await E(publicFacet).getPolTokenIssuer();
+  const polBrand = polIssuer.getBrand();
+
+  const moolaAmount = AmountMath.make(issuers.moola.brand, 3n);
+  const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
+  
+  const seat = await getLockupSeat(zoe, publicFacet, issuers.moola.mint, moolaAmount, polAmount, { bondingPeriod: 7 });
+
+  const payout = await E(seat).getPayout('PolToken');
+  const polTokenAmount = await E(polIssuer).getAmountOf(payout);
+
+  const governanceAmount = AmountMath.make(governanceTokenKit.brand, 40n);
+
+  const addLiquiditySeat = await getAddRewardLiquiditySeat(zoe, creatorFacet, governanceTokenKit, governanceAmount);
+
+  await E(addLiquiditySeat).getOfferResult();
+
+  await timer.tickN(Number(SECONDS_PER_DAY)); // Advance 1 day
+  const renewedTokenPayment = await polIssuer.claim(payout, polTokenAmount);
+  const withdrawalSeat = await getWithdrawSeat(zoe, publicFacet, polTokenAmount, governanceTokenKit.brand, 3n, renewedTokenPayment);
+
+  const withdrawalMessage = await E(withdrawalSeat).getOfferResult();
+
+  t.deepEqual(withdrawalMessage.message, 'Successfully collected governance tokens')
+
+  const withdrawalPayout = await E(withdrawalSeat).getPayout('Governance');
+  const amount = await (governanceTokenKit.issuer).getAmountOf(withdrawalPayout);
+  const withdrawalTokenPayout = await E(withdrawalSeat).getPayout('WithdrawToken');
+  const withdrawalTokenAmount = await E(polIssuer).getAmountOf(withdrawalTokenPayout);
+
+  t.deepEqual(amount.brand, governanceTokenKit.brand);
+  t.deepEqual(amount.value, 3n); // Amount of rewards to collect is 3n (tier value * locked amount = 1 * 3)
+
+  await timer.tickN(Number(SECONDS_PER_DAY) * 6); // Advance 6 days
+
+  const newTokenPayment = await polIssuer.claim(withdrawalTokenPayout, withdrawalTokenAmount);
+  const newWithdrawalSeat = await getWithdrawSeat(zoe, publicFacet, polTokenAmount, governanceTokenKit.brand, 27n, newTokenPayment);
+
+  const newWithdrawalMessage = await E(newWithdrawalSeat).getOfferResult();
+  t.deepEqual(newWithdrawalMessage.message, 'Successfully collected governance tokens');
+
+  const newWithdrawalPayout = await E(newWithdrawalSeat).getPayout('Governance');
+  const newAmount = await E(governanceTokenKit.issuer).getAmountOf(newWithdrawalPayout);
+
+  t.deepEqual(newAmount.brand, governanceTokenKit.brand);
+  t.deepEqual(newAmount.value, 27n); // Amount of rewards to collect is 30n (tier value * locked amount = 10 * 3) minus rewards already collected (3n)
+});
+
+test('withdraws rewards on a custom strategy', async (t) => {
+  const { zoe, installation, timer } = await setupContract();
+  const { issuers, creatorFacet, publicFacet, governanceTokenKit } = await initializeContract(
+    zoe,
+    installation,
+    timer,
+    lockupStrategies.TIMED_LOCKUP,
+    {
+      type: rewardStrategyTypes.CUSTOM,
+      definition: (tokensLockedIn, timeLockedIn) => {
+        return tokensLockedIn * timeLockedIn - (tokensLockedIn - 1);
+      }
+    }
+  );
+
+  const polIssuer = await E(publicFacet).getPolTokenIssuer();
+  const polBrand = polIssuer.getBrand();
+
+  const moolaAmount = AmountMath.make(issuers.moola.brand, 3n);
+  const polAmount = AmountMath.makeEmpty(polBrand, AssetKind.SET);
+  
+  const seat = await getLockupSeat(zoe, publicFacet, issuers.moola.mint, moolaAmount, polAmount, { bondingPeriod: 7 });
+
+  const payout = await E(seat).getPayout('PolToken');
+  const polTokenAmount = await E(polIssuer).getAmountOf(payout);
+
+  const governanceAmount = AmountMath.make(governanceTokenKit.brand, 40n);
+
+  const addLiquiditySeat = await getAddRewardLiquiditySeat(zoe, creatorFacet, governanceTokenKit, governanceAmount);
+
+  await E(addLiquiditySeat).getOfferResult();
+
+  await timer.tickN(Number(SECONDS_PER_DAY)); // Advance 1 day
+  const renewedTokenPayment = await polIssuer.claim(payout, polTokenAmount);
+  const withdrawalSeat = await getWithdrawSeat(zoe, publicFacet, polTokenAmount, governanceTokenKit.brand, 1n, renewedTokenPayment);
+
+  const withdrawalMessage = await E(withdrawalSeat).getOfferResult();
+
+  t.deepEqual(withdrawalMessage.message, 'Successfully collected governance tokens')
+
+  const withdrawalPayout = await E(withdrawalSeat).getPayout('Governance');
+  const amount = await (governanceTokenKit.issuer).getAmountOf(withdrawalPayout);
+  const withdrawalTokenPayout = await E(withdrawalSeat).getPayout('WithdrawToken');
+  const withdrawalTokenAmount = await E(polIssuer).getAmountOf(withdrawalTokenPayout);
+
+  t.deepEqual(amount.brand, governanceTokenKit.brand);
+  t.deepEqual(amount.value, 1n); // Amount of rewards to collect is the result of calling the method in definition
+
+  await timer.tickN(Number(SECONDS_PER_DAY) * 6); // Advance 6 days
+
+  // Rewards to collect should be (tokensLockedIn * timeLockedIn) - (tokensLockedIn - 1) - rewardsCollected => (3 * 7) - (3 - 1) - 1 => 18
+  const newTokenPayment = await polIssuer.claim(withdrawalTokenPayout, withdrawalTokenAmount);
+  const newWithdrawalSeat = await getWithdrawSeat(zoe, publicFacet, polTokenAmount, governanceTokenKit.brand, 18n, newTokenPayment);
+
+  const newWithdrawalMessage = await E(newWithdrawalSeat).getOfferResult();
+  t.deepEqual(newWithdrawalMessage.message, 'Successfully collected governance tokens');
+
+  const newWithdrawalPayout = await E(newWithdrawalSeat).getPayout('Governance');
+  const newAmount = await E(governanceTokenKit.issuer).getAmountOf(newWithdrawalPayout);
+
+  t.deepEqual(newAmount.brand, governanceTokenKit.brand);
+  t.deepEqual(newAmount.value, 18n);
+});

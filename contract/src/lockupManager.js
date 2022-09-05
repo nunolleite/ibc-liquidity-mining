@@ -53,7 +53,7 @@ export const makeLockupManager = (
             return Number(tokensLockedIn) * Number(timeLockedIn) * (rewardStrategyValue ? rewardStrategyValue : 1) - rewardsCollected;
         }
         if (rewardStrategyType === rewardStrategyTypes.CUSTOM) {
-            return rewardStrategyValue(tokensLockedIn, timeLockedIn) - rewardsCollected;
+            return rewardStrategyValue(Number(tokensLockedIn), timeLockedIn) - Number(rewardsCollected);
         }
 
         let tier = null;
