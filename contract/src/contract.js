@@ -38,7 +38,6 @@ const start = async (zcf) => {
   if (!warnMinimumGovernanceTokenSupply) warnMinimumGovernanceTokenSupplyAmount = AmountMath.make(gTokenBrand, DEFAULT_WARN_MINIMUM_GOVERNANCE_TOKEN_SUPPLY);
   else warnMinimumGovernanceTokenSupplyAmount = AmountMath.make(gTokenBrand, warnMinimumGovernanceTokenSupply);
 
-  // TODO: Maybe we need to check if every issuer in initialSupportedIssuers is active in the AMM ?
   assert(checkLockupStrategy(lockupStrategy), `The given lockup strategy (${lockupStrategy}) is not supported`);
   assert(checkRewardStrategyStructure(rewardStrategy), `The given reward strategy object (${rewardStrategy}) is malformed. Has to have type and definition.`);
   let {
@@ -62,6 +61,8 @@ const start = async (zcf) => {
           const allegedName = await issuer.getAllegedName();
           await zcf.saveIssuer(issuer, allegedName);
           const brand = zcf.getBrandForIssuer(issuer);
+          // TODO: Maybe we need to check if every issuer in initialSupportedIssuers is active in the AMM ?
+          // TODO: Use getLiquidityIssuer(brand) maybe ?
           supportedBrands.init(brand, true);
         })
       )
@@ -245,25 +246,6 @@ const start = async (zcf) => {
     return zcf.makeInvitation(withdrawRewardsHook, "Withdraw rewards");
   }
 
-
-
-  const creatorFacet = Far('creator facet', {
-    addSupportedIssuer,
-    checkGovernanceTokenLiquidity: () => { return totalGovernanceTokenSupply.value },
-    checkWarnMinimumGovernanceTokenSupply: () => { return warnMinimumGovernanceTokenSupplyAmount.value },
-    alterWarnMinimumGovernanceTokenSupply: (newValue) => {warnMinimumGovernanceTokenSupplyAmount = AmountMath.make(gTokenBrand, newValue)},
-    makeAddRewardLiquidityInvitation: () => { return zcf.makeInvitation(addRewardLiquidity, "Add reward Liquidity") }
-  });
-
-  const publicFacet = Far('public facet', {
-    getPolTokenIssuer: () => { return polIssuer},
-    isIssuerSupported,
-    makeLockupInvitation,
-    makeUnlockInvitation,
-    makeRedeemInvitation,
-    makeWithdrawRewardsInvitation,
-  });
-
   const observer = {
     updateState: updateTime => {
       Array.from(lockupsMap.entries()).map(
@@ -302,7 +284,7 @@ const start = async (zcf) => {
         currentSupply: totalGovernanceTokenSupply.value
       }
 
-      if (totalGovernanceTokenSupply < warnMinimumGovernanceTokenSupplyAmount) state.underLimit = true;
+      if (totalGovernanceTokenSupply.value < warnMinimumGovernanceTokenSupplyAmount.value) state.underLimit = true;
 
       publication.updateState(state);
     },
@@ -315,6 +297,24 @@ const start = async (zcf) => {
   }
 
   observeNotifier(periodNotifier, creatorObserver);
+
+  const creatorFacet = Far('creator facet', {
+    addSupportedIssuer,
+    checkGovernanceTokenLiquidity: () => { return totalGovernanceTokenSupply.value },
+    checkWarnMinimumGovernanceTokenSupply: () => { return warnMinimumGovernanceTokenSupplyAmount.value },
+    getWarnGovernanceTokenSupplySubscription: () => { return subscription; },
+    alterWarnMinimumGovernanceTokenSupply: (newValue) => {warnMinimumGovernanceTokenSupplyAmount = AmountMath.make(gTokenBrand, newValue)},
+    makeAddRewardLiquidityInvitation: () => { return zcf.makeInvitation(addRewardLiquidity, "Add reward Liquidity") }
+  });
+
+  const publicFacet = Far('public facet', {
+    getPolTokenIssuer: () => { return polIssuer},
+    isIssuerSupported,
+    makeLockupInvitation,
+    makeUnlockInvitation,
+    makeRedeemInvitation,
+    makeWithdrawRewardsInvitation,
+  });
 
   return harden({ creatorFacet, publicFacet, publicSubscribers: { subscription }});
 }

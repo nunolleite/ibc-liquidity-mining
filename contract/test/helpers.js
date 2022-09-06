@@ -76,6 +76,20 @@ const getWithdrawSeat = async (zoe, publicFacet, polTokenAmount, governanceToken
     )
 };
 
+const consume = async (subscription, n=1) => {
+    const notifications = [];
+    try {
+      for await (const value of subscription) {
+        notifications.push(value);
+        if (notifications.length === n) break;
+      }
+    } catch (reason) {
+
+    }
+
+    return notifications;
+  };
+
 export {
     getInitialSupportedIssuers,
     getIssuer,
@@ -84,5 +98,6 @@ export {
     getLockupSeat,
     getUnlockSeat,
     getRedeemSeat,
-    getWithdrawSeat
+    getWithdrawSeat,
+    consume
 }

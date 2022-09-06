@@ -5,22 +5,24 @@ import { test } from '@agoric/zoe/tools/prepare-test-env-ava.js';
 import { E } from '@endo/far';
 
 import { setupContract, initializeContract } from "./setup.js";
-import { getAddRewardLiquiditySeat, getIssuer, getLockupSeat, getRedeemSeat, getUnlockSeat, getWithdrawSeat } from './helpers.js';
+import { getAddRewardLiquiditySeat, getIssuer, getLockupSeat, getRedeemSeat, getUnlockSeat, getWithdrawSeat, consume } from './helpers.js';
 import { AmountMath, AssetKind } from '@agoric/ertp';
-import { SECONDS_PER_DAY } from '../src/helpers.js';
+import { SECONDS_PER_DAY, SECONDS_PER_HOUR } from '../src/helpers.js';
 import { lockupStrategies, rewardStrategyTypes } from '../src/definitions.js';
 
 test('check correct initialization', async (t) => {
   const { zoe, installation, timer } = await setupContract();
-  const {issuers, publicFacet } = await initializeContract(zoe, installation, timer);
+  const {issuers, publicFacet, creatorFacet } = await initializeContract(zoe, installation, timer);
 
   const { issuer: notSupportedIssuer} = getIssuer('Fake');
 
   const firstResponse = await E(publicFacet).isIssuerSupported(issuers.moola.issuer);
   const secondResponse = await E(publicFacet).isIssuerSupported(notSupportedIssuer);
+  const subscription = await E(creatorFacet).getWarnGovernanceTokenSupplySubscription();
   
   t.is(firstResponse, true);
   t.is(secondResponse, false);
+  t.truthy(subscription);
 })
 
 test('able to add another supported issuer', async(t) => {
@@ -65,6 +67,65 @@ test('adds governance token liquidity', async (t) => {
   const governanceTokenLiquidity = await E(creatorFacet).checkGovernanceTokenLiquidity();
 
   t.deepEqual(governanceTokenLiquidity, 10n);
+})
+
+test('checks that the default limit for warning gToken Supply is 100n', async(t) => {
+  const { zoe, installation, timer } = await setupContract();
+  const { creatorFacet } = await initializeContract(zoe, installation, timer);
+
+  const value = await E(creatorFacet).checkWarnMinimumGovernanceTokenSupply();
+
+  t.deepEqual(value, 100n);
+})
+
+test('allows instantiating the contract with different limit for warning gToken supply', async (t) => {
+  const { zoe, installation, timer } = await setupContract();
+  const { creatorFacet } = await initializeContract(
+    zoe,
+    installation,
+    timer,
+    lockupStrategies.TIMED_LOCKUP,
+    { type: rewardStrategyTypes.LINEAR, definition: 1},
+    150n
+  );
+
+  const value = await E(creatorFacet).checkWarnMinimumGovernanceTokenSupply();
+
+  t.deepEqual(value, 150n);
+})
+
+test('allows altering the limit value for warning about the supply of governance tokens', async (t) => {
+  const { zoe, installation, timer } = await setupContract();
+  const { creatorFacet } = await initializeContract(zoe, installation, timer);
+
+  const initialValue = await E(creatorFacet).checkWarnMinimumGovernanceTokenSupply();
+  t.deepEqual(initialValue, 100n);
+
+  await E(creatorFacet).alterWarnMinimumGovernanceTokenSupply(200n);
+
+  const newValue = await E(creatorFacet).checkWarnMinimumGovernanceTokenSupply();
+  t.deepEqual(newValue, 200n);
+})
+
+test('correctly notifies of the limits for the governance token supply', async (t) => {
+  const { zoe, installation, timer } = await setupContract();
+  const { creatorFacet, governanceTokenKit } = await initializeContract(zoe, installation, timer);
+
+  const subscription = await E(creatorFacet).getWarnGovernanceTokenSupplySubscription();
+
+  const seat = await getAddRewardLiquiditySeat(zoe, creatorFacet, governanceTokenKit, AmountMath.make(governanceTokenKit.brand, 150n));
+  const result = await E(seat).getOfferResult();
+
+  t.deepEqual(result, "Governance tokens liquidity increased by 150");
+
+  await timer.tickN(Number(SECONDS_PER_HOUR));
+
+  const newNotifications = await consume(subscription, 2);
+
+  t.deepEqual(newNotifications[0].underLimit, true); // notifications[0] is the notification pushed at startup
+  t.deepEqual(newNotifications[0].currentSupply, 0n);
+  t.deepEqual(newNotifications[1].underLimit, false); // notifications[1] is the notification pushed after one hour
+  t.deepEqual(newNotifications[1].currentSupply, 150n);
 })
 
 test('locks with timed lockup', async (t) => {

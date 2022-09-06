@@ -27,7 +27,7 @@ const setupContract = async () => {
     }
 };
 
-const initializeContract = async (zoe, installation, timer, lockupStrategy = "", rewardsStrategy = {}) => {
+const initializeContract = async (zoe, installation, timer, lockupStrategy = "", rewardsStrategy = {}, warnMinimumGovernanceTokenSupply = 0n) => {
     const issuers = getInitialSupportedIssuers();
     const initialIssuers = [issuers.moola.issuer, issuers.van.issuer];
     const governanceTokenKit = getGovernanceTokenKit();
@@ -45,7 +45,8 @@ const initializeContract = async (zoe, installation, timer, lockupStrategy = "",
         initialSupportedIssuers: initialIssuers,
         lockupStrategy: decidedLockStrategy,
         rewardStrategy: decidedRewardsStrategy,
-        gTokenBrand: governanceTokenKit.brand
+        gTokenBrand: governanceTokenKit.brand,
+        warnMinimumGovernanceTokenSupply
     });
 
     const { creatorFacet, publicFacet } = await E(zoe).startInstance(
