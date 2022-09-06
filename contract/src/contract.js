@@ -250,6 +250,7 @@ const start = async (zcf) => {
   const creatorFacet = Far('creator facet', {
     addSupportedIssuer,
     checkGovernanceTokenLiquidity: () => { return totalGovernanceTokenSupply.value },
+    alterWarnMinimumGovernanceTokenSupply: (newValue) => {warnMinimumGovernanceTokenSupplyAmount = AmountMath.make(gTokenBrand, newValue)},
     makeAddRewardLiquidityInvitation: () => { return zcf.makeInvitation(addRewardLiquidity, "Add reward Liquidity") }
   });
 
