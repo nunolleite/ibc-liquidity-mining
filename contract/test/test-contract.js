@@ -4,11 +4,16 @@ import { test } from '@agoric/zoe/tools/prepare-test-env-ava.js';
 
 import { E } from '@endo/far';
 
-import { setupContract, initializeContract } from "./setup.js";
+import { setupContract, initializeContract, initializeContractWithoutIssuerInAMM } from "./setup.js";
 import { getAddRewardLiquiditySeat, getIssuer, getLockupSeat, getRedeemSeat, getUnlockSeat, getWithdrawSeat, consume } from './helpers.js';
 import { AmountMath, AssetKind } from '@agoric/ertp';
 import { SECONDS_PER_DAY, SECONDS_PER_HOUR } from '../src/helpers.js';
 import { lockupStrategies, rewardStrategyTypes } from '../src/definitions.js';
+
+test('does not initialize with issuer not in AMM', async (t) => {
+  const { zoe, installation, timer } = await setupContract();
+  await t.throwsAsync(initializeContractWithoutIssuerInAMM(zoe, installation, timer), {message: 'Liquidity issuer with brand Unsupported does not exist in the AMM'})
+})
 
 test('check correct initialization', async (t) => {
   const { zoe, installation, timer } = await setupContract();

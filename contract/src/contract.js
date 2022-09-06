@@ -62,7 +62,7 @@ const start = async (zcf) => {
           await zcf.saveIssuer(issuer, allegedName);
           const brand = zcf.getBrandForIssuer(issuer);
           // Issuers must be in the AMM
-          // await E(ammPublicFacet).getLiquidityIssuer(brand);
+          await E(ammPublicFacet).getLiquidityIssuer(brand);
           supportedBrands.init(brand, true);
         })
       )
