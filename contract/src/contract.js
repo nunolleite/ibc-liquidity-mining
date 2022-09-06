@@ -61,8 +61,8 @@ const start = async (zcf) => {
           const allegedName = await issuer.getAllegedName();
           await zcf.saveIssuer(issuer, allegedName);
           const brand = zcf.getBrandForIssuer(issuer);
-          // TODO: Maybe we need to check if every issuer in initialSupportedIssuers is active in the AMM ?
-          // TODO: Use getLiquidityIssuer(brand) maybe ?
+          // Issuers must be in the AMM
+          // await E(ammPublicFacet).getLiquidityIssuer(brand);
           supportedBrands.init(brand, true);
         })
       )
