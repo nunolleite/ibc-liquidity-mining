@@ -2,7 +2,7 @@
 
 import fs from 'fs';
 import '@agoric/zoe/exported.js';
-import { E } from '@endo/eventual-send';
+import { E } from '@endo/far';
 import bundleSource from '@endo/bundle-source';
 
 // This script takes our contract code, installs it on Zoe, and makes
@@ -97,9 +97,9 @@ const deployContract = async (homePromise, { pathResolve }) => {
     CONTRACT_NAME,
     INSTALLATION_BOARD_ID,
   };
-  const defaultsFolder = pathResolve(`../ui/public/conf`);
+  const defaultsFolder = pathResolve(`../assets/dapp-constants`);
   const defaultsFile = pathResolve(
-    `../ui/public/conf/installationConstants.js`,
+    `../assets/dapp-constants/installationConstants.js`,
   );
   console.log('writing', defaultsFile);
   const defaultsContents = `\

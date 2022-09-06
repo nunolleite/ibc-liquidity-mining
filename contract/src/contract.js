@@ -2,12 +2,12 @@
 import '@agoric/zoe/exported.js';
 import { assertProposalShape } from '@agoric/zoe/src/contractSupport/index.js';
 import { AmountMath, AssetKind } from '@agoric/ertp';
-import { lockupStrategies, rewardStrategyTypes } from './definitions';
+import { lockupStrategies, rewardStrategyTypes, DEFAULT_WARN_MINIMUM_GOVERNANCE_TOKEN_SUPPLY } from './definitions';
 import { checkTiers, checkLockupStrategy, checkRewardStrategyType, checkRewardStrategyStructure } from './verifiers';
 import { E, Far } from '@endo/far';
 import { makeScalarMap } from '@agoric/store';
 import { makeLockupManager } from './lockupManager';
-import { observeNotifier } from '@agoric/notifier';
+import { makeSubscriptionKit, observeNotifier } from '@agoric/notifier';
 import { orderTiers, SECONDS_PER_HOUR } from './helpers';
 
 /**
@@ -23,7 +23,8 @@ const start = async (zcf) => {
     initialSupportedIssuers,
     lockupStrategy,
     rewardStrategy,
-    gTokenBrand
+    gTokenBrand,
+    warnMinimumGovernanceTokenSupply = 0n
   } = zcf.getTerms();
 
   const { zcfSeat } = zcf.makeEmptySeatKit();
@@ -33,6 +34,9 @@ const start = async (zcf) => {
   const lockupsMap = makeScalarMap('lockups');
   const { brand: polBrand, issuer: polIssuer } = polMint.getIssuerRecord();
   const periodNotifier = await E(timerService).makeNotifier(0n, SECONDS_PER_HOUR);
+  let warnMinimumGovernanceTokenSupplyAmount;
+  if (!warnMinimumGovernanceTokenSupply) warnMinimumGovernanceTokenSupplyAmount = AmountMath.make(gTokenBrand, DEFAULT_WARN_MINIMUM_GOVERNANCE_TOKEN_SUPPLY);
+  else warnMinimumGovernanceTokenSupplyAmount = AmountMath.make(gTokenBrand, warnMinimumGovernanceTokenSupply);
 
   // TODO: Maybe we need to check if every issuer in initialSupportedIssuers is active in the AMM ?
   assert(checkLockupStrategy(lockupStrategy), `The given lockup strategy (${lockupStrategy}) is not supported`);
@@ -79,7 +83,7 @@ const start = async (zcf) => {
       const allegedIssuerName = await tokenIssuer.getAllegedName();
       await zcf.saveIssuer(tokenIssuer, allegedIssuerName);
       const certainBrand = zcf.getBrandForIssuer(tokenIssuer);
-      supportedBrands.init(certainBrand, true); // TODO: For now we use bools, maybe later we wil want some metadata
+      supportedBrands.init(certainBrand, true);
       return;
     }
 
@@ -286,7 +290,31 @@ const start = async (zcf) => {
 
   observeNotifier(periodNotifier, observer);
 
-  return harden({ creatorFacet, publicFacet });
+  const { publication, subscription } = makeSubscriptionKit();
+
+  const creatorObserver = {
+    updateState: updateTime => {
+      let state = {
+        underLimit: false,
+        verificationTime: updateTime,
+        currentSupply: totalGovernanceTokenSupply.value
+      }
+
+      if (totalGovernanceTokenSupply < warnMinimumGovernanceTokenSupplyAmount) state.underLimit = true;
+
+      publication.updateState(state);
+    },
+    fail: reason => {
+      publication.fail(reason);
+    },
+    finish: done => {
+      publication.finish(done);
+    }
+  }
+
+  observeNotifier(periodNotifier, creatorObserver);
+
+  return harden({ creatorFacet, publicFacet, publicSubscribers: { subscription }});
 }
 
 harden(start);

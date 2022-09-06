@@ -10,11 +10,14 @@ const rewardStrategyTypes = {
     CUSTOM: "custom"
 };
 
+const DEFAULT_WARN_MINIMUM_GOVERNANCE_TOKEN_SUPPLY = 100n;
+
 harden(lockupStrategies);
 harden(rewardStrategyTypes);
 
 
 export {
     lockupStrategies,
-    rewardStrategyTypes
+    rewardStrategyTypes,
+    DEFAULT_WARN_MINIMUM_GOVERNANCE_TOKEN_SUPPLY
 };
