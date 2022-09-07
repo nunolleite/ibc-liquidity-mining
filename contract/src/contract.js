@@ -18,7 +18,6 @@ import { orderTiers, SECONDS_PER_HOUR } from './helpers';
 const start = async (zcf) => {
 
   const {
-    ammPublicFacet,
     timerService,
     initialSupportedIssuers,
     lockupStrategy,
@@ -61,8 +60,6 @@ const start = async (zcf) => {
           const allegedName = await issuer.getAllegedName();
           await zcf.saveIssuer(issuer, allegedName);
           const brand = zcf.getBrandForIssuer(issuer);
-          // Issuers must be in the AMM
-          await E(ammPublicFacet).getLiquidityIssuer(brand);
           supportedBrands.init(brand, true);
         })
       )
