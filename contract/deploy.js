@@ -167,7 +167,7 @@ const deployContract = async (homePromise, { bundleSource, pathResolve }) => {
   );
   
   console.log("--- Creating Issuer Kits ---");
-  const moolaIssuer = [await E(wallet).getIssuer("BLD")];
+  const moolaIssuer = await E(wallet).getIssuer("BLD");
   const issuers = {
     moola: {
       issuer: moolaIssuer

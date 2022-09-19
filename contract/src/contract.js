@@ -57,7 +57,7 @@ const start = async (zcf) => {
     return harden(
       Promise.all(
         initialSupportedIssuers.map(async issuer => {
-          const allegedName = await issuer.getAllegedName();
+          const allegedName = await E(issuer).getAllegedName();
           await zcf.saveIssuer(issuer, allegedName);
           const brand = zcf.getBrandForIssuer(issuer);
           supportedBrands.init(brand, true);
@@ -78,14 +78,14 @@ const start = async (zcf) => {
       allegedBrand = zcf.getBrandForIssuer(tokenIssuer);
     } catch (e) {
       // Issuer is not yet supported
-      const allegedIssuerName = await tokenIssuer.getAllegedName();
+      const allegedIssuerName = await E(tokenIssuer).getAllegedName();
       await zcf.saveIssuer(tokenIssuer, allegedIssuerName);
       const certainBrand = zcf.getBrandForIssuer(tokenIssuer);
       supportedBrands.init(certainBrand, true);
       return;
     }
 
-    assert(!supportedBrands.has(allegedBrand), `${tokenIssuer.getAllegedName()} issuer is already supported`);
+    assert(!supportedBrands.has(allegedBrand), `${await E(tokenIssuer).getAllegedName()} issuer is already supported`);
   }
 
   /**
