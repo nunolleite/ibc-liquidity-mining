@@ -5,9 +5,8 @@ import '@agoric/zoe/exported.js';
 import { E } from '@endo/far';
 import { resolve as importMetaResolve } from 'import-meta-resolve';
 import buildManualTimer from '@agoric/zoe/tools/manualTimer.js';
-import { getInitialSupportedIssuers, getGovernanceTokenKit } from "./test/helpers.js";
 import { lockupStrategies, rewardStrategyTypes } from "../contract/src/definitions.js";
-import { AmountMath, makeIssuerKit } from '@agoric/ertp';
+import { AmountMath } from '@agoric/ertp';
 
 // This script takes our contract code, installs it on Zoe, and makes
 // the installation publicly available. Our backend API script will
