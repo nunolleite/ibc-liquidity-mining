@@ -88,7 +88,7 @@ const consume = async (subscription, n=1) => {
     }
 
     return notifications;
-  };
+};
 
 export {
     getInitialSupportedIssuers,

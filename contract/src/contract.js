@@ -28,7 +28,7 @@ const start = async (zcf) => {
 
   const { zcfSeat } = zcf.makeEmptySeatKit();
   let totalGovernanceTokenSupply = AmountMath.makeEmpty(gTokenBrand, 'nat');
-  const polMint = await zcf.makeZCFMint('PolMint', AssetKind.SET);
+  const polMint = await zcf.makeZCFMint('Pol', AssetKind.SET);
   let lockupCounter = 1;
   const lockupsMap = makeScalarMap('lockups');
   const { brand: polBrand, issuer: polIssuer } = polMint.getIssuerRecord();
