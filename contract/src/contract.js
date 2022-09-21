@@ -23,13 +23,15 @@ const start = async (zcf) => {
     lockupStrategy,
     rewardStrategy,
     gTokenBrand,
-    warnMinimumGovernanceTokenSupply = 0n
+    warnMinimumGovernanceTokenSupply = 0n,
+    unbondingPeriod = 14 // Only relevant if lockupStrategy === unlock
   } = zcf.getTerms();
 
   const { zcfSeat } = zcf.makeEmptySeatKit();
   let totalGovernanceTokenSupply = AmountMath.makeEmpty(gTokenBrand, 'nat');
   const polMint = await zcf.makeZCFMint('Pol', AssetKind.SET);
   let lockupCounter = 1;
+  let lockupUnbondingPeriod = unbondingPeriod; //days
   const lockupsMap = makeScalarMap('lockups');
   const { brand: polBrand, issuer: polIssuer } = polMint.getIssuerRecord();
   const periodNotifier = await E(timerService).makeNotifier(0n, SECONDS_PER_HOUR);
@@ -49,8 +51,6 @@ const start = async (zcf) => {
     assert(checkTiers(rewardStrategyDefinition), `Tiers for the reward strategy are malformed. Each one has to have tokenAmount and timeAmount`);
     rewardStrategyDefinition = orderTiers(rewardStrategyDefinition);
   }
-
-  assert(!(rewardStrategyType === rewardStrategyTypes.TIER && lockupStrategy === lockupStrategies.UNLOCK), `Reward strategy of type tier is still not supported for the Unlock lockup strategy`);
 
   const supportedBrands = makeScalarMap('brand');
   const initializeBrands = async () => {
@@ -175,7 +175,7 @@ const start = async (zcf) => {
   const makeUnlockInvitation = () => {
     assert(lockupStrategy === lockupStrategies.UNLOCK, `This contract does not support the unlocking strategy`);
 
-    const unlockHook = async (userSeat, offerArgs) => {
+    const unlockHook = async (userSeat) => {
       assertProposalShape(userSeat, {
         give: { PolToken: null },
         want: { UnbondingToken: null }
@@ -183,7 +183,7 @@ const start = async (zcf) => {
 
       const { give: { PolToken: polTokenAmount } } = userSeat.getProposal();
       const lockupManager = lockupsMap.get(polTokenAmount.value[0].lockupId);
-      const unlockResult = await lockupManager.unlock(userSeat, offerArgs);
+      const unlockResult = await lockupManager.unlock(userSeat, lockupUnbondingPeriod);
 
       userSeat.exit();
       return unlockResult;
@@ -241,6 +241,20 @@ const start = async (zcf) => {
     }
 
     return zcf.makeInvitation(withdrawRewardsHook, "Withdraw rewards");
+  }
+
+  /**
+   * 
+   * @param {Number} newUnbondingPeriod 
+   * @returns {Promise<string>} success message
+   */
+  const alterUnbondingPeriod = async (newUnbondingPeriod) => {
+    assert(lockupStrategy === lockupStrategies.UNLOCK, "Cannot set an unbonding period on a contract with a timed lockup strategy");
+
+    const message = `Unbonding period altered from ${lockupUnbondingPeriod} to ${newUnbondingPeriod}`;
+    lockupUnbondingPeriod = newUnbondingPeriod;
+
+    return message;
   }
 
   const observer = {
@@ -301,7 +315,9 @@ const start = async (zcf) => {
     checkWarnMinimumGovernanceTokenSupply: () => { return warnMinimumGovernanceTokenSupplyAmount.value },
     getWarnGovernanceTokenSupplySubscription: () => { return subscription; },
     alterWarnMinimumGovernanceTokenSupply: (newValue) => {warnMinimumGovernanceTokenSupplyAmount = AmountMath.make(gTokenBrand, newValue)},
-    makeAddRewardLiquidityInvitation: () => { return zcf.makeInvitation(addRewardLiquidity, "Add reward Liquidity") }
+    makeAddRewardLiquidityInvitation: () => { return zcf.makeInvitation(addRewardLiquidity, "Add reward Liquidity") },
+    checkUnbondingPeriod: () => {return lockupUnbondingPeriod;},
+    alterUnbondingPeriod
   });
 
   const publicFacet = Far('public facet', {

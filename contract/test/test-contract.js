@@ -263,7 +263,7 @@ test('starts unbonding on an unlock strategy', async (t) => {
 
   const renewedPolTokenPayment = await polIssuer.claim(payout, polTokenAmount);
 
-  const unlockSeat = await getUnlockSeat(zoe, publicFacet, polTokenAmount, polBrand, renewedPolTokenPayment, { unbondingPeriod: 1 });
+  const unlockSeat = await getUnlockSeat(zoe, publicFacet, polTokenAmount, polBrand, renewedPolTokenPayment);
 
   const unlockMessage = await E(unlockSeat).getOfferResult();
 
@@ -273,7 +273,7 @@ test('starts unbonding on an unlock strategy', async (t) => {
 
   t.deepEqual(unbondingToken.amountLockedIn, 5n);
   t.deepEqual(unbondingToken.lockupId, '1');
-  t.deepEqual(unbondingToken.unbondingPeriod, 1);
+  t.deepEqual(unbondingToken.unbondingPeriod, 14);
   t.deepEqual(unbondingToken.unbondingTimestamp, 1n); // time has to have ticked to 1
   t.deepEqual(unlockMessage.message, "Unlock operation succeeded");
   t.truthy(unlockMessage.publicSubscribers);
@@ -750,3 +750,36 @@ test('withdraws rewards on a custom strategy', async (t) => {
   t.deepEqual(newAmount.brand, governanceTokenKit.brand);
   t.deepEqual(newAmount.value, 18n);
 });
+
+test('checks the unbonding period', async (t) => {
+  const { zoe, installation, timer } = await setupContract();
+  const { creatorFacet } = await initializeContract(
+    zoe,
+    installation,
+    timer,
+    lockupStrategies.UNLOCK
+  );
+
+  const unbondingPeriod = await E(creatorFacet).checkUnbondingPeriod();
+  t.deepEqual(unbondingPeriod, 14);
+});
+
+test('is able to alter the unbonding period', async (t) => {
+  const { zoe, installation, timer } = await setupContract();
+  const { creatorFacet } = await initializeContract(
+    zoe,
+    installation,
+    timer,
+    lockupStrategies.UNLOCK
+  );
+
+  const oldUnbondingPeriod = await E(creatorFacet).checkUnbondingPeriod();
+  t.deepEqual(oldUnbondingPeriod, 14);
+
+  const message = await E(creatorFacet).alterUnbondingPeriod(20);
+
+  t.deepEqual(message, "Unbonding period altered from 14 to 20")
+
+  const newUnbondingPeriod = await E(creatorFacet).checkUnbondingPeriod();
+  t.deepEqual(newUnbondingPeriod, 20);
+})

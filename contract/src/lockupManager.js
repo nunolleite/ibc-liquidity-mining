@@ -52,6 +52,8 @@ export const makeLockupManager = (
         if (rewardStrategyType === rewardStrategyTypes.LINEAR) {
             return Number(tokensLockedIn) * Number(timeLockedIn) * (rewardStrategyValue ? rewardStrategyValue : 1) - rewardsCollected;
         }
+
+        // In the CUSTOM strategy, the value is a function of type (amountLockedIn, timeLockedIn) => {return <calculations>}
         if (rewardStrategyType === rewardStrategyTypes.CUSTOM) {
             return rewardStrategyValue(Number(tokensLockedIn), timeLockedIn) - Number(rewardsCollected);
         }
@@ -59,7 +61,7 @@ export const makeLockupManager = (
         let tier = null;
         for (const valueTier of rewardStrategyValue) {
             if (valueTier.timeAmount > timeLockedIn) {
-                // We know tiers are ordered asceding by timeAmount
+                // We know tiers are ordered ascending by timeAmount on contract creation
                 break;
             }
 
@@ -84,10 +86,14 @@ export const makeLockupManager = (
         let mostRecentConsideredTimestamp = 0n;
         let hasPassed = false;
 
+        if(!unbondingTimestamp && lockupStrategy === lockupStrategies.UNLOCK) {
+            mostRecentConsideredTimestamp = currentTimestamp;
+        }
+
         if (unbondingTimestamp) {
             const unbondingPeriodInSeconds = daysToSeconds(lockupUnbondingPeriod);
             hasPassed = unbondingTimestamp + unbondingPeriodInSeconds < currentTimestamp;
-            mostRecentConsideredTimestamp = hasPassed ? lockingTimestamp + unbondingTimestamp + unbondingPeriodInSeconds : currentTimestamp
+            mostRecentConsideredTimestamp = hasPassed ? unbondingTimestamp + unbondingPeriodInSeconds : currentTimestamp
         }
 
         if (lockupBondingPeriod) {
@@ -173,11 +179,11 @@ export const makeLockupManager = (
     /**
      * 
      * @param {ZCFSeat} userSeat 
-     * @param {Object} offerArgs 
+     * @param {Number} unbondingPeriod 
      * @returns {Promise<Object>}
      */
-    const unlock = async (userSeat, offerArgs) => {
-        lockupUnbondingPeriod = offerArgs.unbondingPeriod ? offerArgs.unbondingPeriod : 1;
+    const unlock = async (userSeat, unbondingPeriod) => {
+        lockupUnbondingPeriod = unbondingPeriod;
 
         const { give: { PolToken: polTokenAmount } } = userSeat.getProposal();
         const polToken = polTokenAmount.value[0];
@@ -186,7 +192,7 @@ export const makeLockupManager = (
 
         const newUnbondingTokenAmount = AmountMath.make(polBrand, harden([{
             ...polToken,
-            unbondingPeriod: lockupUnbondingPeriod,
+            unbondingPeriod,
             unbondingTimestamp: currentTimestamp
         }]));
 
@@ -222,10 +228,10 @@ export const makeLockupManager = (
         const currentTimestamp = await E(timerService).getCurrentTimestamp();
         if (lockupUnbondingPeriod) {
             const unbondingPeriodInSeconds = daysToSeconds(lockupUnbondingPeriod);
-            assert(unbondingTimestamp + unbondingPeriodInSeconds < currentTimestamp, `You are still in the unbonding period. Cannot redeem the LP tokens yet`);
+            assert(unbondingTimestamp + unbondingPeriodInSeconds <= currentTimestamp, `You are still in the unbonding period. Cannot redeem the LP tokens yet`);
         } else {
             const bondingPeriodInSeconds = daysToSeconds(lockupBondingPeriod);
-            assert(lockingTimestamp + bondingPeriodInSeconds < currentTimestamp, `You are still in the bonding period. Cannot redeem tokens`);
+            assert(lockingTimestamp + bondingPeriodInSeconds <= currentTimestamp, `You are still in the bonding period. Cannot redeem tokens`);
         }
 
         assert(lpTokensAmount.value === amountLockedIn.value, `The amount you are trying to redeem is diferent than the one locked in`);

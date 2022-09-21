@@ -7,6 +7,8 @@ import { resolve as importMetaResolve } from 'import-meta-resolve';
 import { lockupStrategies, rewardStrategyTypes } from "../src/definitions.js";
 import { AmountMath } from '@agoric/ertp';
 
+const LOCKUP_STRAT = lockupStrategies.TIMED_LOCKUP;
+
 const contractRoots = {
   main: '../src/contract.js',
   timer: './faucets/timerFaucet.js',
@@ -78,15 +80,41 @@ const installBundle = async (bundleSource, contractName, contractRoot, zoe, boar
  * @param {Issuer} governanceTokenIssuer
  */
 const initializeRootContract = async (zoe, installation, timer, initialSupportedIssuers, governanceTokenBrand, governanceTokenIssuer) => {
+  const lockupStrategy = LOCKUP_STRAT;
+  let rewardStrategy;
 
+  if (lockupStrategy === lockupStrategies.TIMED_LOCKUP) {
+    rewardStrategy = {
+      type: rewardStrategyTypes.LINEAR,
+      definition: 0.5
+    }
+  } else {
+    rewardStrategy = {
+      type: rewardStrategyTypes.TIER,
+      definition: [
+        {
+          timeAmount: 1,
+          tokenAmount: 1
+        },
+        {
+          timeAmount: 3,
+          tokenAmount: 3
+        },
+        {
+          timeAmount: 10,
+          tokenAmount: 10
+        }
+      ]
+    }
+  }
+
+  console.log(`Deploying contract with strategy: ${lockupStrategy}`);
+  
   const terms = harden({
     timerService: timer,
     initialSupportedIssuers,
-    lockupStrategy: lockupStrategies.TIMED_LOCKUP,
-    rewardStrategy: {
-      type: rewardStrategyTypes.LINEAR,
-      definition: 0.5
-    },
+    lockupStrategy,
+    rewardStrategy,
     gTokenBrand: governanceTokenBrand,
     warnMinimumGovernanceTokenSupply: 10n
   });

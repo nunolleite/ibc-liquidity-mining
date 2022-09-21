@@ -48,13 +48,12 @@ const getLockupSeat = async (zoe, publicFacet, lpTokensMint, lpTokensAmount, pol
     )
 }
 
-const getUnlockSeat = async (zoe, publicFacet, polTokenAmount, polBrand, payment, offerArgs) => {
+const getUnlockSeat = async (zoe, publicFacet, polTokenAmount, polBrand, payment) => {
     return await getSeat(
         zoe,
         await E(publicFacet).makeUnlockInvitation(),
         { give: { PolToken: polTokenAmount }, want: { UnbondingToken: AmountMath.makeEmpty(polBrand, AssetKind.SET)}},
-        harden({ PolToken: payment }),
-        offerArgs
+        harden({ PolToken: payment })
     )
 };
 

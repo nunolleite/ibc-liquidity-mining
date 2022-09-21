@@ -3,6 +3,9 @@
 import { E } from '@endo/far';
 import contractDefaults from '../assets/dapp-constants/installationConstants.js';
 import { AmountMath, AssetKind } from '@agoric/ertp';
+import { lockupStrategies } from '../contract/src/definitions.js';
+
+const LOCKUP_STRAT = lockupStrategies.TIMED_LOCKUP;
 
 const lockup = async (homePromise, {}) => {
     const home = await homePromise;
@@ -41,13 +44,15 @@ const lockup = async (homePromise, {}) => {
 
     console.log("Initiating lockup ...");
 
+    const offerArgs = {};
+
+    if(LOCKUP_STRAT === lockupStrategies.TIMED_LOCKUP) offerArgs["bondingPeriod"] = 2;
+
     const seat = await E(zoe).offer(
         lockupInvitation,
         lockupProposal,
         lockupPayment,
-        {
-            bondingPeriod: 2
-        }
+        offerArgs
     );
 
     console.log("Lockup initiated ...");

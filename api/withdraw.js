@@ -30,7 +30,7 @@ const withdraw = async (homePromise, {}) => {
 
     console.log('Building withdraw amounts ...');
     const giveAmount = await E(polPurse).getCurrentAmount();
-    const wantAmount = AmountMath.make(await E(governanceIssuer).getBrand(), 5n);
+    const wantAmount = AmountMath.make(await E(governanceIssuer).getBrand(), 1n);
     const payment = await E(polPurse).withdraw(giveAmount);
 
     console.log('Collecting invitation ...');

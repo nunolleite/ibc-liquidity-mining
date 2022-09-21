@@ -23,7 +23,7 @@ const addRewardLiquidity = async (homePromise, {}) => {
     const governanceTokenBrand = await E(board).getValue(GOVERNANCE_BRAND_ID);
     const addRewardLiquidityInvitation = await E(creatorFacet).makeAddRewardLiquidityInvitation();
 
-    const governanceAmount = AmountMath.make(governanceTokenBrand, 50n);
+    const governanceAmount = AmountMath.make(governanceTokenBrand, 1000n);
 
     const addRewardLiquidityProposal = harden({
         give: {
